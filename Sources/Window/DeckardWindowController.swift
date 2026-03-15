@@ -1,27 +1,26 @@
 import AppKit
 import GhosttyKit
 
-/// Represents a single tab in the sidebar.
+// MARK: - Data Models
+
+/// A horizontal tab within a project (Claude session or terminal).
 class TabItem {
     let id: UUID
     var surfaceView: TerminalNSView
     var name: String
-    var nameOverride: Bool = false
-    var isMaster: Bool = false
-    var isClaude: Bool = true
+    var isClaude: Bool
     var sessionId: String?
-    var workingDirectory: String?
     var badgeState: BadgeState = .none
 
     enum BadgeState: String {
         case none
-        case thinking        // green - Claude is working/thinking
-        case waitingForInput // blue - waiting for user input
-        case needsPermission // orange - needs permission approval
-        case error           // red
+        case thinking
+        case waitingForInput
+        case needsPermission
+        case error
     }
 
-    init(surfaceView: TerminalNSView, name: String, isClaude: Bool = true) {
+    init(surfaceView: TerminalNSView, name: String, isClaude: Bool) {
         self.id = surfaceView.surfaceId
         self.surfaceView = surfaceView
         self.name = name
@@ -29,24 +28,53 @@ class TabItem {
     }
 }
 
-/// The main window controller with a vertical tab sidebar on the left.
+/// A project in the vertical sidebar — contains horizontal tabs.
+class ProjectItem {
+    let id: UUID
+    var path: String
+    var name: String  // basename of path
+    var tabs: [TabItem] = []
+    var selectedTabIndex: Int = 0
+
+    init(path: String) {
+        self.id = UUID()
+        self.path = path
+        self.name = (path as NSString).lastPathComponent
+    }
+}
+
+// MARK: - Default Tab Configuration
+
+struct DefaultTabConfig {
+    var entries: [(isClaude: Bool, name: String)]
+
+    static var current: DefaultTabConfig {
+        // TODO: Make configurable via settings
+        return DefaultTabConfig(entries: [
+            (isClaude: true, name: "Claude"),
+            (isClaude: false, name: "Terminal"),
+        ])
+    }
+}
+
+// MARK: - Window Controller
+
 class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
     private let ghosttyApp: DeckardGhosttyApp
-    private var tabs: [TabItem] = []
-    private var selectedTabIndex: Int = -1
+    private var projects: [ProjectItem] = []
+    private var selectedProjectIndex: Int = -1
 
-    // UI components
+    // UI
     private let splitView = NSSplitView()
     private let sidebarView = NSView()
-    private let sidebarScrollView = NSScrollView()
-    private let sidebarStackView = NSStackView()     // terminals at top
-    private let claudeStackView = NSStackView()      // claude sessions at bottom
+    private let sidebarStackView = NSStackView()
+    private let rightPane = NSView()
+    private let tabBar = NSStackView()          // horizontal tab bar
     private let terminalContainerView = NSView()
     private var currentTerminalView: TerminalNSView?
-    private var claudeTabCounter: Int = 0
-    private var terminalTabCounter: Int = 0
 
     private let sidebarWidth: CGFloat = 210
+    private var isRestoring = false
 
     init(ghosttyApp: DeckardGhosttyApp) {
         self.ghosttyApp = ghosttyApp
@@ -60,41 +88,32 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         window.title = "Deckard"
         window.minSize = NSSize(width: 600, height: 400)
         window.backgroundColor = ghosttyApp.defaultBackgroundColor
-
-        // Disable macOS's own tab bar system
         window.tabbingMode = .disallowed
 
         super.init(window: window)
 
-        // Restore saved frame or center
         window.setFrameAutosaveName("DeckardMainWindow")
         if !window.setFrameUsingName("DeckardMainWindow") {
             window.center()
         }
 
         setupUI()
-        restoreOrCreateInitialTab()
+        restoreOrCreateInitial()
 
-        // Start autosaving state every 8 seconds
         SessionManager.shared.startAutosave { [weak self] in
             self?.captureState() ?? DeckardState()
         }
     }
 
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) is not supported")
-    }
+    required init?(coder: NSCoder) { fatalError() }
 
-    deinit {
-        SessionManager.shared.stopAutosave()
-    }
+    deinit { SessionManager.shared.stopAutosave() }
 
     // MARK: - UI Setup
 
     private func setupUI() {
         guard let contentView = window?.contentView else { return }
 
-        // Simple layout: sidebar | terminal
         splitView.isVertical = true
         splitView.dividerStyle = .thin
         splitView.delegate = self
@@ -108,104 +127,143 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
             splitView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
         ])
 
-        // Sidebar: terminals at top, claude sessions at bottom
+        // Sidebar
         sidebarView.translatesAutoresizingMaskIntoConstraints = false
         sidebarView.wantsLayer = true
         sidebarView.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.95).cgColor
 
-        // Top zone: terminal tabs
         sidebarStackView.orientation = .vertical
         sidebarStackView.alignment = .leading
         sidebarStackView.spacing = 1
         sidebarStackView.translatesAutoresizingMaskIntoConstraints = false
         sidebarView.addSubview(sidebarStackView)
 
-        // Bottom zone: claude sessions
-        claudeStackView.orientation = .vertical
-        claudeStackView.alignment = .leading
-        claudeStackView.spacing = 1
-        claudeStackView.translatesAutoresizingMaskIntoConstraints = false
-        sidebarView.addSubview(claudeStackView)
-
         NSLayoutConstraint.activate([
             sidebarStackView.topAnchor.constraint(equalTo: sidebarView.topAnchor, constant: 8),
             sidebarStackView.leadingAnchor.constraint(equalTo: sidebarView.leadingAnchor),
             sidebarStackView.trailingAnchor.constraint(equalTo: sidebarView.trailingAnchor),
-
-            claudeStackView.bottomAnchor.constraint(equalTo: sidebarView.bottomAnchor, constant: -8),
-            claudeStackView.leadingAnchor.constraint(equalTo: sidebarView.leadingAnchor),
-            claudeStackView.trailingAnchor.constraint(equalTo: sidebarView.trailingAnchor),
         ])
 
+        // Right pane: tab bar + terminal
+        rightPane.translatesAutoresizingMaskIntoConstraints = false
+
+        tabBar.orientation = .horizontal
+        tabBar.alignment = .centerY
+        tabBar.spacing = 0
+        tabBar.translatesAutoresizingMaskIntoConstraints = false
+        tabBar.wantsLayer = true
+        tabBar.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.8).cgColor
+        rightPane.addSubview(tabBar)
+
         terminalContainerView.translatesAutoresizingMaskIntoConstraints = false
+        rightPane.addSubview(terminalContainerView)
+
+        NSLayoutConstraint.activate([
+            tabBar.topAnchor.constraint(equalTo: rightPane.topAnchor),
+            tabBar.leadingAnchor.constraint(equalTo: rightPane.leadingAnchor),
+            tabBar.trailingAnchor.constraint(equalTo: rightPane.trailingAnchor),
+            tabBar.heightAnchor.constraint(equalToConstant: 30),
+
+            terminalContainerView.topAnchor.constraint(equalTo: tabBar.bottomAnchor),
+            terminalContainerView.leadingAnchor.constraint(equalTo: rightPane.leadingAnchor),
+            terminalContainerView.trailingAnchor.constraint(equalTo: rightPane.trailingAnchor),
+            terminalContainerView.bottomAnchor.constraint(equalTo: rightPane.bottomAnchor),
+        ])
 
         splitView.addArrangedSubview(sidebarView)
-        splitView.addArrangedSubview(terminalContainerView)
+        splitView.addArrangedSubview(rightPane)
 
-        // Ensure sidebar has a reasonable width
         sidebarView.widthAnchor.constraint(greaterThanOrEqualToConstant: 80).isActive = true
 
         DispatchQueue.main.async { [self] in
             splitView.setPosition(sidebarWidth, ofDividerAt: 0)
         }
 
-        // Force window to show
         window?.makeKeyAndOrderFront(nil)
     }
 
     // MARK: - NSSplitViewDelegate
 
-    func splitView(_ splitView: NSSplitView, constrainMinCoordinate proposedMinimumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
-        return 80  // minimum sidebar width
+    func splitView(_ splitView: NSSplitView, constrainMinCoordinate p: CGFloat, ofSubviewAt i: Int) -> CGFloat { 80 }
+    func splitView(_ splitView: NSSplitView, constrainMaxCoordinate p: CGFloat, ofSubviewAt i: Int) -> CGFloat { min(300, splitView.bounds.width * 0.3) }
+    func splitView(_ splitView: NSSplitView, canCollapseSubview s: NSView) -> Bool { false }
+
+    // MARK: - Project Management
+
+    func openProject(path: String) {
+        // Check if project already open
+        if let idx = projects.firstIndex(where: { $0.path == path }) {
+            selectProject(at: idx)
+            return
+        }
+
+        let project = ProjectItem(path: path)
+
+        // Create default tabs
+        let config = DefaultTabConfig.current
+        for entry in config.entries {
+            createTabInProject(project, isClaude: entry.isClaude, name: entry.name)
+        }
+
+        projects.append(project)
+        rebuildSidebar()
+        selectProject(at: projects.count - 1)
+        if !isRestoring { saveState() }
     }
 
-    func splitView(_ splitView: NSSplitView, constrainMaxCoordinate proposedMaximumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
-        return min(300, splitView.bounds.width * 0.3)  // max 30% of window
+    func closeProject(at index: Int) {
+        guard index >= 0, index < projects.count else { return }
+        let project = projects[index]
+
+        // Destroy all surfaces
+        for tab in project.tabs {
+            tab.surfaceView.destroySurface()
+            tab.surfaceView.removeFromSuperview()
+        }
+
+        projects.remove(at: index)
+        rebuildSidebar()
+
+        if projects.isEmpty {
+            selectedProjectIndex = -1
+            currentTerminalView?.removeFromSuperview()
+            currentTerminalView = nil
+            rebuildTabBar()
+        } else {
+            selectProject(at: min(index, projects.count - 1))
+        }
+        saveState()
     }
 
-    func splitView(_ splitView: NSSplitView, canCollapseSubview subview: NSView) -> Bool {
-        return false  // don't allow sidebar to collapse
+    func selectProject(at index: Int) {
+        guard index >= 0, index < projects.count else { return }
+        selectedProjectIndex = index
+        rebuildTabBar()
+
+        let project = projects[index]
+        if project.selectedTabIndex >= 0, project.selectedTabIndex < project.tabs.count {
+            showTab(project.tabs[project.selectedTabIndex])
+        }
+
+        updateSidebarSelection()
     }
 
-    // MARK: - Tab Management
+    // MARK: - Tab Management (within a project)
 
-    static var defaultWorkingDirectory: String {
-        get { UserDefaults.standard.string(forKey: "defaultWorkingDirectory") ?? NSHomeDirectory() + "/Documents" }
-        set { UserDefaults.standard.set(newValue, forKey: "defaultWorkingDirectory") }
-    }
-
-    func createTab(claude: Bool, workingDirectory: String? = nil, name: String? = nil, sessionIdToResume: String? = nil) {
+    private func createTabInProject(_ project: ProjectItem, isClaude: Bool, name: String, sessionIdToResume: String? = nil) {
         guard let app = ghosttyApp.app else { return }
 
-        let effectiveWorkingDirectory = workingDirectory ?? Self.defaultWorkingDirectory
-
         let surfaceView = TerminalNSView()
-        let tabName: String
-        if let name = name {
-            tabName = name
-        } else if claude {
-            if !isRestoring { claudeTabCounter += 1 }
-            tabName = "Claude Code #\(claudeTabCounter)"
-        } else {
-            if !isRestoring { terminalTabCounter += 1 }
-            tabName = "Terminal #\(terminalTabCounter)"
-        }
-        let tab = TabItem(surfaceView: surfaceView, name: tabName, isClaude: claude)
-        tab.workingDirectory = effectiveWorkingDirectory
+        let tab = TabItem(surfaceView: surfaceView, name: name, isClaude: isClaude)
 
-        // Session ID will be captured from Claude Code via the SessionStart hook.
-        // For resumption, we pass --resume <id> via initialInput.
-        var extraEnvVars: [String: String] = [:]
-        if claude {
-            tab.sessionId = sessionIdToResume // nil for new sessions, set for resumed ones
-            extraEnvVars["DECKARD_SESSION_TYPE"] = "claude"
+        var envVars: [String: String] = [:]
+        if isClaude {
+            tab.sessionId = sessionIdToResume
+            envVars["DECKARD_SESSION_TYPE"] = "claude"
         }
 
-        // For Claude tabs, launch claude via shell.
-        // Prepend DECKARD_BIN_DIR to PATH so our wrapper is found first,
-        // then clear screen and run claude.
         let initialInput: String?
-        if claude {
+        if isClaude {
             let pathPrefix = "export PATH=\"$DECKARD_BIN_DIR:$PATH\"; "
             if let sid = sessionIdToResume {
                 initialInput = "\(pathPrefix)clear; claude --resume \(sid)\n"
@@ -213,242 +271,264 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
                 initialInput = "\(pathPrefix)clear; claude\n"
             }
         } else {
-            initialInput = nil
+            initialInput = "clear\n"
         }
 
         surfaceView.createSurface(
             app: app,
             tabId: tab.id,
-            workingDirectory: effectiveWorkingDirectory,
+            workingDirectory: project.path,
             command: nil,
-            envVars: extraEnvVars,
+            envVars: envVars,
             initialInput: initialInput
         )
 
-        tabs.append(tab)
-        rebuildSidebar()
-        selectTab(at: tabs.count - 1)
-        if !isRestoring { saveState() }
+        project.tabs.append(tab)
+    }
+
+    func addTabToCurrentProject(isClaude: Bool) {
+        guard selectedProjectIndex >= 0, selectedProjectIndex < projects.count else { return }
+        let project = projects[selectedProjectIndex]
+        let name = isClaude ? "Claude" : "Terminal"
+        createTabInProject(project, isClaude: isClaude, name: name)
+        project.selectedTabIndex = project.tabs.count - 1
+        rebuildTabBar()
+        showTab(project.tabs[project.selectedTabIndex])
+        saveState()
     }
 
     func closeCurrentTab() {
-        guard selectedTabIndex >= 0, selectedTabIndex < tabs.count else { return }
-        closeTab(at: selectedTabIndex)
-    }
+        guard let project = currentProject else { return }
+        let idx = project.selectedTabIndex
+        guard idx >= 0, idx < project.tabs.count else { return }
 
-    func closeTab(at index: Int) {
-        guard index >= 0, index < tabs.count else { return }
-
-        let tab = tabs[index]
+        let tab = project.tabs[idx]
         tab.surfaceView.destroySurface()
         tab.surfaceView.removeFromSuperview()
-        tabs.remove(at: index)
+        project.tabs.remove(at: idx)
 
-        rebuildSidebar()
-
-        if tabs.isEmpty {
-            selectedTabIndex = -1
-            currentTerminalView = nil
-            createTab(claude: true)
+        if project.tabs.isEmpty {
+            // Close the whole project if no tabs left
+            if let pi = projects.firstIndex(where: { $0.id == project.id }) {
+                closeProject(at: pi)
+            }
         } else {
-            let newIndex = min(index, tabs.count - 1)
-            selectTab(at: newIndex)
+            project.selectedTabIndex = min(idx, project.tabs.count - 1)
+            rebuildTabBar()
+            showTab(project.tabs[project.selectedTabIndex])
         }
         saveState()
     }
 
-    func selectTab(at index: Int) {
-        guard index >= 0, index < tabs.count else { return }
-
-        // Unfocus old
-        if selectedTabIndex >= 0, selectedTabIndex < tabs.count {
-            tabs[selectedTabIndex].surfaceView.surface.map { ghostty_surface_set_focus($0, false) }
-        }
-
-        selectedTabIndex = index
-
-        // Swap terminal views
-        currentTerminalView?.removeFromSuperview()
-
-        let newView = tabs[index].surfaceView
-        newView.translatesAutoresizingMaskIntoConstraints = false
-        terminalContainerView.addSubview(newView)
-        NSLayoutConstraint.activate([
-            newView.topAnchor.constraint(equalTo: terminalContainerView.topAnchor),
-            newView.bottomAnchor.constraint(equalTo: terminalContainerView.bottomAnchor),
-            newView.leadingAnchor.constraint(equalTo: terminalContainerView.leadingAnchor),
-            newView.trailingAnchor.constraint(equalTo: terminalContainerView.trailingAnchor),
-        ])
-        currentTerminalView = newView
-
-        // Focus the terminal
-        window?.makeFirstResponder(newView)
-
-        // Update sidebar highlight
-        updateSidebarSelection()
+    func selectTabInProject(at tabIndex: Int) {
+        guard let project = currentProject else { return }
+        guard tabIndex >= 0, tabIndex < project.tabs.count else { return }
+        project.selectedTabIndex = tabIndex
+        rebuildTabBar()
+        showTab(project.tabs[tabIndex])
     }
 
     func duplicateCurrentTab() {
-        guard selectedTabIndex >= 0, selectedTabIndex < tabs.count else { return }
-        let current = tabs[selectedTabIndex]
-        createTab(claude: current.isClaude, workingDirectory: current.workingDirectory)
+        guard let project = currentProject else { return }
+        guard project.selectedTabIndex >= 0, project.selectedTabIndex < project.tabs.count else { return }
+        let current = project.tabs[project.selectedTabIndex]
+        addTabToCurrentProject(isClaude: current.isClaude)
     }
 
     func selectNextTab() {
-        guard !tabs.isEmpty else { return }
-        selectTab(at: (selectedTabIndex + 1) % tabs.count)
+        guard let project = currentProject, !project.tabs.isEmpty else { return }
+        selectTabInProject(at: (project.selectedTabIndex + 1) % project.tabs.count)
     }
 
     func selectPrevTab() {
-        guard !tabs.isEmpty else { return }
-        selectTab(at: (selectedTabIndex - 1 + tabs.count) % tabs.count)
+        guard let project = currentProject, !project.tabs.isEmpty else { return }
+        selectTabInProject(at: (project.selectedTabIndex - 1 + project.tabs.count) % project.tabs.count)
     }
 
-    func focusTabById(_ tabId: UUID) {
-        if let index = tabs.firstIndex(where: { $0.id == tabId }) {
-            selectTab(at: index)
-            window?.makeKeyAndOrderFront(nil)
-        }
+    var currentProject: ProjectItem? {
+        guard selectedProjectIndex >= 0, selectedProjectIndex < projects.count else { return nil }
+        return projects[selectedProjectIndex]
     }
 
+    private func showTab(_ tab: TabItem) {
+        currentTerminalView?.removeFromSuperview()
+
+        let view = tab.surfaceView
+        view.translatesAutoresizingMaskIntoConstraints = false
+        terminalContainerView.addSubview(view)
+        NSLayoutConstraint.activate([
+            view.topAnchor.constraint(equalTo: terminalContainerView.topAnchor),
+            view.bottomAnchor.constraint(equalTo: terminalContainerView.bottomAnchor),
+            view.leadingAnchor.constraint(equalTo: terminalContainerView.leadingAnchor),
+            view.trailingAnchor.constraint(equalTo: terminalContainerView.trailingAnchor),
+        ])
+        currentTerminalView = view
+        window?.makeFirstResponder(view)
+    }
 
     func focusedSurface() -> ghostty_surface_t? {
-        guard selectedTabIndex >= 0, selectedTabIndex < tabs.count else { return nil }
-        return tabs[selectedTabIndex].surfaceView.surface
+        guard let project = currentProject else { return nil }
+        let idx = project.selectedTabIndex
+        guard idx >= 0, idx < project.tabs.count else { return nil }
+        return project.tabs[idx].surfaceView.surface
     }
 
     // MARK: - Surface Callbacks
 
     func setTitle(_ title: String, forSurface surface: ghostty_surface_t?) {
         guard let surface = surface else { return }
-        for tab in tabs {
-            if tab.surfaceView.surface == surface {
-                // Store the terminal title but don't update the sidebar name.
-                // Tab names are managed by Deckard (numbered by default,
-                // later renamed by the master session).
+        for project in projects {
+            for tab in project.tabs where tab.surfaceView.surface == surface {
                 tab.surfaceView.title = title
-                break
+                return
             }
         }
     }
 
     func setPwd(_ pwd: String, forSurface surface: ghostty_surface_t?) {
         guard let surface = surface else { return }
-        for tab in tabs {
-            if tab.surfaceView.surface == surface {
+        for project in projects {
+            for tab in project.tabs where tab.surfaceView.surface == surface {
                 tab.surfaceView.pwd = pwd
-                break
+                return
             }
         }
     }
 
     func handleSurfaceClosedById(_ surfaceId: UUID) {
-        if let index = tabs.firstIndex(where: { $0.id == surfaceId }) {
-            closeTab(at: index)
+        for (pi, project) in projects.enumerated() {
+            if let ti = project.tabs.firstIndex(where: { $0.id == surfaceId }) {
+                let tab = project.tabs[ti]
+                tab.surfaceView.destroySurface()
+                tab.surfaceView.removeFromSuperview()
+                project.tabs.remove(at: ti)
+
+                if project.tabs.isEmpty {
+                    closeProject(at: pi)
+                } else if pi == selectedProjectIndex {
+                    project.selectedTabIndex = min(project.selectedTabIndex, project.tabs.count - 1)
+                    rebuildTabBar()
+                    showTab(project.tabs[project.selectedTabIndex])
+                }
+                return
+            }
         }
     }
 
-    // MARK: - Tab Lookup
+    // MARK: - Lookup helpers
 
     func tabForSurfaceId(_ surfaceIdStr: String) -> TabItem? {
         guard let surfaceId = UUID(uuidString: surfaceIdStr) else { return nil }
-        return tabs.first(where: { $0.id == surfaceId })
+        for project in projects {
+            if let tab = project.tabs.first(where: { $0.id == surfaceId }) {
+                return tab
+            }
+        }
+        return nil
     }
 
     func isTabFocused(_ surfaceIdStr: String) -> Bool {
         guard let surfaceId = UUID(uuidString: surfaceIdStr) else { return false }
-        guard selectedTabIndex >= 0, selectedTabIndex < tabs.count else { return false }
-        return tabs[selectedTabIndex].id == surfaceId && (window?.isKeyWindow ?? false)
+        guard let project = currentProject else { return false }
+        let idx = project.selectedTabIndex
+        guard idx >= 0, idx < project.tabs.count else { return false }
+        return project.tabs[idx].id == surfaceId && (window?.isKeyWindow ?? false)
     }
 
-    // MARK: - Remote Control (via socket/MCP)
-
-    func renameTab(id tabIdStr: String, name: String) {
-        guard let tabId = UUID(uuidString: tabIdStr) else { return }
-        for (i, tab) in tabs.enumerated() {
-            if tab.id == tabId {
-                tab.name = name
-                tab.nameOverride = true
-                updateSidebarItem(at: i)
-                saveState()
-                break
+    func focusTabById(_ tabId: UUID) {
+        for (pi, project) in projects.enumerated() {
+            if let ti = project.tabs.firstIndex(where: { $0.id == tabId }) {
+                selectProject(at: pi)
+                selectTabInProject(at: ti)
+                window?.makeKeyAndOrderFront(nil)
+                return
             }
         }
     }
 
-    func closeTabById(_ tabIdStr: String) {
-        guard let tabId = UUID(uuidString: tabIdStr) else { return }
-        if let index = tabs.firstIndex(where: { $0.id == tabId }) {
-            closeTab(at: index)
-        }
-    }
-
-    // MARK: - Session ID Tracking
+    // MARK: - Session ID / Badge
 
     func updateSessionId(forSurfaceId surfaceIdStr: String, sessionId: String) {
-        guard let surfaceId = UUID(uuidString: surfaceIdStr) else { return }
-        for tab in tabs {
-            if tab.id == surfaceId {
-                let oldId = tab.sessionId
-                tab.sessionId = sessionId
-                if oldId != sessionId {
-                    saveState()
-                }
-                break
-            }
+        guard let tab = tabForSurfaceId(surfaceIdStr) else { return }
+        if tab.sessionId != sessionId {
+            tab.sessionId = sessionId
+            saveState()
         }
     }
 
-    // MARK: - Badge Updates
-
     func updateBadge(forSurfaceId surfaceIdStr: String, state: TabItem.BadgeState) {
-        guard let surfaceId = UUID(uuidString: surfaceIdStr) else { return }
-        for (i, tab) in tabs.enumerated() {
-            if tab.id == surfaceId {
-                tab.badgeState = state
-                for row in allSidebarRows where row.index == i {
-                    row.badgeState = state
-                }
-                break
-            }
-        }
+        guard let tab = tabForSurfaceId(surfaceIdStr) else { return }
+        tab.badgeState = state
+        // Update tab bar button if this is the current project
+        rebuildTabBar()
     }
 
     func listTabInfo() -> [TabInfo] {
-        return tabs.map { tab in
-            TabInfo(
-                id: tab.id.uuidString,
-                name: tab.name,
-                isClaude: tab.isClaude,
-                isMaster: tab.isMaster,
-                sessionId: tab.sessionId,
-                badgeState: "\(tab.badgeState)",
-                workingDirectory: tab.workingDirectory
-            )
+        var result: [TabInfo] = []
+        for project in projects {
+            for tab in project.tabs {
+                result.append(TabInfo(
+                    id: tab.id.uuidString,
+                    name: "\(project.name)/\(tab.name)",
+                    isClaude: tab.isClaude,
+                    isMaster: false,
+                    sessionId: tab.sessionId,
+                    badgeState: tab.badgeState.rawValue,
+                    workingDirectory: project.path
+                ))
+            }
         }
+        return result
+    }
+
+    // MARK: - Remote Control
+
+    func renameTab(id tabIdStr: String, name: String) {
+        guard let tab = tabForSurfaceId(tabIdStr) else { return }
+        tab.name = name
+        rebuildTabBar()
+        saveState()
+    }
+
+    func closeTabById(_ tabIdStr: String) {
+        guard let surfaceId = UUID(uuidString: tabIdStr) else { return }
+        handleSurfaceClosedById(surfaceId)
     }
 
     // MARK: - State Persistence
 
     func captureState() -> DeckardState {
         var state = DeckardState()
-        state.claudeTabCounter = claudeTabCounter
-        state.terminalTabCounter = terminalTabCounter
-        state.defaultWorkingDirectory = Self.defaultWorkingDirectory
-        state.selectedTabIndex = selectedTabIndex
-
-        state.tabs = tabs.map { tab in
+        state.selectedTabIndex = selectedProjectIndex
+        state.tabs = projects.map { project in
+            // Store project-level info; individual tabs stored in a new field
             TabState(
-                id: tab.id.uuidString,
-                sessionId: tab.sessionId,
-                name: tab.name,
-                nameOverride: tab.nameOverride,
-                isMaster: tab.isMaster,
-                isClaude: tab.isClaude,
-                workingDirectory: tab.workingDirectory
+                id: project.id.uuidString,
+                sessionId: nil,
+                name: project.name,
+                nameOverride: false,
+                isMaster: false,
+                isClaude: false,
+                workingDirectory: project.path
             )
         }
-
+        // Store full project data in the new projects field
+        state.projects = projects.map { project in
+            ProjectState(
+                id: project.id.uuidString,
+                path: project.path,
+                name: project.name,
+                selectedTabIndex: project.selectedTabIndex,
+                tabs: project.tabs.map { tab in
+                    ProjectTabState(
+                        id: tab.id.uuidString,
+                        name: tab.name,
+                        isClaude: tab.isClaude,
+                        sessionId: tab.sessionId
+                    )
+                }
+            )
+        }
         return state
     }
 
@@ -456,124 +536,153 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         SessionManager.shared.save(captureState())
     }
 
-    private var isRestoring = false
-
-    private func restoreOrCreateInitialTab() {
-        guard let state = SessionManager.shared.load(), !state.tabs.isEmpty else {
-            createTab(claude: true)
-            return
+    private func restoreOrCreateInitial() {
+        guard let state = SessionManager.shared.load(),
+              let projectStates = state.projects, !projectStates.isEmpty else {
+            return  // Nothing to restore — user will use Cmd+T to open projects
         }
 
         isRestoring = true
 
-        // Restore counters and settings
-        claudeTabCounter = state.claudeTabCounter
-        terminalTabCounter = state.terminalTabCounter
-        if let dir = state.defaultWorkingDirectory {
-            Self.defaultWorkingDirectory = dir
-        }
+        for ps in projectStates {
+            let project = ProjectItem(path: ps.path)
 
-        // Restore each tab
-        for tabState in state.tabs {
-            createTab(
-                claude: tabState.isClaude,
-                workingDirectory: tabState.workingDirectory,
-                name: tabState.name,
-                sessionIdToResume: tabState.isClaude ? tabState.sessionId : nil
-            )
-            // Restore override flag on the just-created tab
-            if let last = tabs.last {
-                last.nameOverride = tabState.nameOverride
+            for ts in ps.tabs {
+                createTabInProject(project, isClaude: ts.isClaude, name: ts.name,
+                                   sessionIdToResume: ts.isClaude ? ts.sessionId : nil)
             }
+
+            if project.tabs.isEmpty {
+                // Restore with defaults if tabs were lost
+                let config = DefaultTabConfig.current
+                for entry in config.entries {
+                    createTabInProject(project, isClaude: entry.isClaude, name: entry.name)
+                }
+            }
+
+            project.selectedTabIndex = min(ps.selectedTabIndex, project.tabs.count - 1)
+            projects.append(project)
         }
 
         isRestoring = false
 
-        // Restore selected tab
-        let idx = min(state.selectedTabIndex, tabs.count - 1)
+        rebuildSidebar()
+        let idx = min(state.selectedTabIndex, projects.count - 1)
         if idx >= 0 {
-            selectTab(at: idx)
+            selectProject(at: idx)
         }
-
         saveState()
     }
 
-    // MARK: - Sidebar Rendering
+    // MARK: - Sidebar (project list)
 
     private func rebuildSidebar() {
         sidebarStackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        claudeStackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
 
-        for (i, tab) in tabs.enumerated() {
-            let row = TabRowView(title: tab.name, bold: false, index: i,
-                                 target: self, action: #selector(tabRowClicked(_:)))
-            row.badgeState = tab.badgeState
-
-            let stack = tab.isClaude ? claudeStackView : sidebarStackView
-            stack.addArrangedSubview(row)
-            row.leadingAnchor.constraint(equalTo: stack.leadingAnchor).isActive = true
-            row.trailingAnchor.constraint(equalTo: stack.trailingAnchor).isActive = true
+        for (i, project) in projects.enumerated() {
+            let row = TabRowView(title: project.name, bold: false, index: i,
+                                 target: self, action: #selector(projectRowClicked(_:)))
+            // Show badge from the "worst" tab state in the project
+            row.badgeState = worstBadge(in: project)
+            sidebarStackView.addArrangedSubview(row)
+            row.leadingAnchor.constraint(equalTo: sidebarStackView.leadingAnchor).isActive = true
+            row.trailingAnchor.constraint(equalTo: sidebarStackView.trailingAnchor).isActive = true
         }
 
         updateSidebarSelection()
     }
 
-    private var allSidebarRows: [TabRowView] {
-        let top = sidebarStackView.arrangedSubviews.compactMap { $0 as? TabRowView }
-        let bottom = claudeStackView.arrangedSubviews.compactMap { $0 as? TabRowView }
-        return top + bottom
+    private func worstBadge(in project: ProjectItem) -> TabItem.BadgeState {
+        var worst: TabItem.BadgeState = .none
+        for tab in project.tabs {
+            switch tab.badgeState {
+            case .needsPermission: return .needsPermission
+            case .waitingForInput: worst = .waitingForInput
+            case .thinking where worst == .none: worst = .thinking
+            default: break
+            }
+        }
+        return worst
     }
 
     private func updateSidebarSelection() {
-        for row in allSidebarRows {
-            row.isSelected = (row.index == selectedTabIndex)
-        }
-    }
-
-    private func updateSidebarItem(at index: Int) {
-        guard index >= 0, index < tabs.count else { return }
-        let tab = tabs[index]
-        for row in allSidebarRows where row.index == index {
-            row.title = tab.name
-        }
-    }
-
-    // MARK: - Sidebar Actions
-
-    @objc private func tabRowClicked(_ sender: TabRowView) {
-        let index = sender.index
-        if index >= 0, index < tabs.count {
-            selectTab(at: index)
-        }
-    }
-
-    private func renameTabAtIndex(_ index: Int) {
-        guard index >= 0, index < tabs.count else { return }
-        let tab = tabs[index]
-
-        let alert = NSAlert()
-        alert.messageText = "Rename Tab"
-        alert.informativeText = "Enter a new name for this tab:"
-        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
-        input.stringValue = tab.name
-        alert.accessoryView = input
-        alert.addButton(withTitle: "Rename")
-        alert.addButton(withTitle: "Cancel")
-
-        if alert.runModal() == .alertFirstButtonReturn {
-            let newName = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !newName.isEmpty {
-                tab.name = newName
-                tab.nameOverride = true
-                updateSidebarItem(at: index)
+        for (i, view) in sidebarStackView.arrangedSubviews.enumerated() {
+            if let row = view as? TabRowView {
+                row.isSelected = (i == selectedProjectIndex)
             }
+        }
+    }
+
+    @objc private func projectRowClicked(_ sender: TabRowView) {
+        selectProject(at: sender.index)
+    }
+
+    // MARK: - Tab Bar (horizontal tabs within selected project)
+
+    private func rebuildTabBar() {
+        tabBar.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        guard let project = currentProject else { return }
+
+        for (i, tab) in project.tabs.enumerated() {
+            let button = NSButton(title: tab.name, target: self, action: #selector(tabBarClicked(_:)))
+            button.bezelStyle = .recessed
+            button.setButtonType(.momentaryPushIn)
+            button.isBordered = i == project.selectedTabIndex
+            button.font = .systemFont(ofSize: 12)
+            button.tag = i
+            button.wantsLayer = true
+
+            if i == project.selectedTabIndex {
+                button.layer?.backgroundColor = NSColor.selectedContentBackgroundColor.withAlphaComponent(0.3).cgColor
+                button.layer?.cornerRadius = 4
+            }
+
+            tabBar.addArrangedSubview(button)
+        }
+
+        // Add "+" button
+        let addButton = NSButton(title: "+", target: self, action: #selector(addTabClicked))
+        addButton.bezelStyle = .recessed
+        addButton.font = .systemFont(ofSize: 14)
+        addButton.isBordered = false
+        tabBar.addArrangedSubview(addButton)
+
+        // Spacer to push tabs left
+        let spacer = NSView()
+        spacer.translatesAutoresizingMaskIntoConstraints = false
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        tabBar.addArrangedSubview(spacer)
+    }
+
+    @objc private func tabBarClicked(_ sender: NSButton) {
+        selectTabInProject(at: sender.tag)
+    }
+
+    @objc private func addTabClicked() {
+        addTabToCurrentProject(isClaude: true)
+    }
+
+    // MARK: - Navigation
+
+    func selectNextProject() {
+        guard !projects.isEmpty else { return }
+        selectProject(at: (selectedProjectIndex + 1) % projects.count)
+    }
+
+    func selectPrevProject() {
+        guard !projects.isEmpty else { return }
+        selectProject(at: (selectedProjectIndex - 1 + projects.count) % projects.count)
+    }
+
+    func selectProject(byNumber n: Int) {
+        if n >= 0, n < projects.count {
+            selectProject(at: n)
         }
     }
 }
 
 // MARK: - TabRowView
 
-/// A clickable row in the sidebar representing one tab.
 class TabRowView: NSView {
     var title: String {
         didSet { label.stringValue = title }
@@ -596,7 +705,7 @@ class TabRowView: NSView {
     private var badgeColor: NSColor {
         switch badgeState {
         case .none: return .clear
-        case .thinking: return NSColor(red: 0.85, green: 0.65, blue: 0.2, alpha: 1.0) // amber
+        case .thinking: return NSColor(red: 0.85, green: 0.65, blue: 0.2, alpha: 1.0)
         case .waitingForInput: return .systemBlue
         case .needsPermission: return .systemOrange
         case .error: return .systemRed
@@ -641,9 +750,7 @@ class TabRowView: NSView {
         ])
     }
 
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) is not supported")
-    }
+    required init?(coder: NSCoder) { fatalError() }
 
     override func draw(_ dirtyRect: NSRect) {
         if isSelected {
@@ -657,7 +764,6 @@ class TabRowView: NSView {
     }
 }
 
-// Safe array subscript
 extension Collection {
     subscript(safe index: Index) -> Element? {
         indices.contains(index) ? self[index] : nil

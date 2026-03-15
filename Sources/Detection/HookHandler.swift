@@ -62,12 +62,9 @@ class HookHandler {
             reply(ControlResponse(ok: true, tabs: tabs))
 
         case "create-tab":
-            let isClaude = message.value != "terminal"
-            windowController?.createTab(
-                claude: isClaude,
-                workingDirectory: message.workingDirectory,
-                name: message.name
-            )
+            if let dir = message.workingDirectory {
+                windowController?.openProject(path: dir)
+            }
             reply(ControlResponse(ok: true))
 
         case "rename-tab":

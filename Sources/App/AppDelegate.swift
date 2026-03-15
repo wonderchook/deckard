@@ -81,7 +81,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func handleNewTab() {
-        windowController?.createTab(claude: true)
+        windowController?.addTabToCurrentProject(isClaude: true)
     }
 
     @objc private func handleCloseTab() {
@@ -107,12 +107,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // File menu
         let fileMenuItem = NSMenuItem()
         let fileMenu = NSMenu(title: "File")
-        fileMenu.addItem(withTitle: "New Claude Session", action: #selector(newClaudeSession), keyEquivalent: "t")
-        let termItem = NSMenuItem(title: "New Terminal", action: #selector(newTerminal), keyEquivalent: "t")
+        fileMenu.addItem(withTitle: "Open Project...", action: #selector(openProject), keyEquivalent: "o")
+        fileMenu.addItem(.separator())
+        fileMenu.addItem(withTitle: "New Claude Tab", action: #selector(newClaudeTab), keyEquivalent: "t")
+        let termItem = NSMenuItem(title: "New Terminal Tab", action: #selector(newTerminalTab), keyEquivalent: "t")
         termItem.keyEquivalentModifierMask = [.command, .shift]
         fileMenu.addItem(termItem)
-        fileMenu.addItem(.separator())
         fileMenu.addItem(withTitle: "Duplicate Tab", action: #selector(duplicateTab), keyEquivalent: "d")
+        fileMenu.addItem(.separator())
         fileMenu.addItem(withTitle: "Close Tab", action: #selector(closeCurrentTab), keyEquivalent: "w")
         fileMenu.addItem(.separator())
 
@@ -166,15 +168,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let projectPicker = ProjectPicker()
 
-    @objc private func newClaudeSession() {
+    @objc private func openProject() {
         projectPicker.show(relativeTo: windowController?.window) { [weak self] path in
-            guard let path = path else { return }  // cancelled
-            self?.windowController?.createTab(claude: true, workingDirectory: path)
+            guard let path = path else { return }
+            self?.windowController?.openProject(path: path)
         }
     }
 
-    @objc private func newTerminal() {
-        windowController?.createTab(claude: false)
+    @objc private func newClaudeTab() {
+        windowController?.addTabToCurrentProject(isClaude: true)
+    }
+
+    @objc private func newTerminalTab() {
+        windowController?.addTabToCurrentProject(isClaude: false)
     }
 
     @objc private func closeCurrentTab() {
@@ -194,36 +200,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func selectTabByNumber(_ sender: NSMenuItem) {
-        windowController?.selectTab(at: sender.tag)
+        windowController?.selectProject(byNumber: sender.tag)
     }
 
     @objc private func showSettings() {
+        // TODO: Settings for default tab configuration
         let alert = NSAlert()
         alert.messageText = "Deckard Settings"
-        alert.informativeText = "Default working directory for new tabs:"
-
-        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 350, height: 24))
-        input.stringValue = DeckardWindowController.defaultWorkingDirectory
-        alert.accessoryView = input
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Browse...")
-        alert.addButton(withTitle: "Cancel")
-
-        let response = alert.runModal()
-        if response == .alertFirstButtonReturn {
-            let path = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !path.isEmpty {
-                DeckardWindowController.defaultWorkingDirectory = path
-            }
-        } else if response == .alertSecondButtonReturn {
-            let panel = NSOpenPanel()
-            panel.canChooseDirectories = true
-            panel.canChooseFiles = false
-            panel.allowsMultipleSelection = false
-            panel.directoryURL = URL(fileURLWithPath: DeckardWindowController.defaultWorkingDirectory)
-            if panel.runModal() == .OK, let url = panel.url {
-                DeckardWindowController.defaultWorkingDirectory = url.path
-            }
-        }
+        alert.informativeText = "Settings will be available in a future update."
+        alert.runModal()
     }
 }

@@ -2,23 +2,43 @@ import Foundation
 
 /// Persisted state for Deckard — saved to ~/Library/Application Support/Deckard/state.json
 struct DeckardState: Codable {
-    var version: Int = 1
-    var masterSessionId: String?
-    var claudeTabCounter: Int = 0
-    var terminalTabCounter: Int = 0
+    var version: Int = 2
+    var selectedTabIndex: Int = 0  // selected project index
     var defaultWorkingDirectory: String?
-    var tabs: [TabState] = []
-    var selectedTabIndex: Int = 0
+
+    // Legacy (v1) — kept for backward compat
+    var tabs: [TabState]?
+    var claudeTabCounter: Int?
+    var terminalTabCounter: Int?
+    var masterSessionId: String?
+
+    // v2: project-based
+    var projects: [ProjectState]?
 }
 
 struct TabState: Codable {
-    var id: String           // UUID string
-    var sessionId: String?   // Claude Code session ID for resumption
+    var id: String
+    var sessionId: String?
     var name: String
     var nameOverride: Bool
     var isMaster: Bool
     var isClaude: Bool
     var workingDirectory: String?
+}
+
+struct ProjectState: Codable {
+    var id: String
+    var path: String
+    var name: String
+    var selectedTabIndex: Int
+    var tabs: [ProjectTabState]
+}
+
+struct ProjectTabState: Codable {
+    var id: String
+    var name: String
+    var isClaude: Bool
+    var sessionId: String?
 }
 
 /// Manages saving and loading Deckard state.
@@ -37,15 +57,8 @@ class SessionManager {
     func save(_ state: DeckardState) {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(state) else {
-            print("Failed to encode state")
-            return
-        }
-        do {
-            try data.write(to: stateURL, options: .atomic)
-        } catch {
-            print("Failed to write state: \(error)")
-        }
+        guard let data = try? encoder.encode(state) else { return }
+        try? data.write(to: stateURL, options: .atomic)
     }
 
     func load() -> DeckardState? {
@@ -53,7 +66,6 @@ class SessionManager {
         return try? JSONDecoder().decode(DeckardState.self, from: data)
     }
 
-    /// Start periodic autosave every 8 seconds.
     func startAutosave(provider: @escaping () -> DeckardState) {
         autosaveTimer?.invalidate()
         autosaveTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: true) { [weak self] _ in
