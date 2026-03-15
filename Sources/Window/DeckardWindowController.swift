@@ -186,21 +186,28 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         sidebarStackView.translatesAutoresizingMaskIntoConstraints = false
         sidebarView.addSubview(sidebarStackView)
 
-        // Open project button in the top-left area (next to traffic lights)
+        // Open folder button in the title bar (right-aligned)
         let openButton = NSButton(image: NSImage(systemSymbolName: "folder.badge.plus", accessibilityDescription: "Open Folder")!, target: self, action: #selector(openProjectClicked))
         openButton.bezelStyle = .recessed
         openButton.isBordered = false
         openButton.contentTintColor = .secondaryLabelColor
         openButton.toolTip = "Open Folder (\u{2318}O)"
         openButton.translatesAutoresizingMaskIntoConstraints = false
-        sidebarView.addSubview(openButton)
+        openButton.widthAnchor.constraint(equalToConstant: 28).isActive = true
+        openButton.heightAnchor.constraint(equalToConstant: 22).isActive = true
+
+        let accessoryVC = NSTitlebarAccessoryViewController()
+        let accessoryView = NSView()
+        accessoryView.addSubview(openButton)
+        NSLayoutConstraint.activate([
+            openButton.trailingAnchor.constraint(equalTo: accessoryView.trailingAnchor, constant: -8),
+            openButton.centerYAnchor.constraint(equalTo: accessoryView.centerYAnchor),
+        ])
+        accessoryVC.view = accessoryView
+        accessoryVC.layoutAttribute = .trailing
+        window?.addTitlebarAccessoryViewController(accessoryVC)
 
         NSLayoutConstraint.activate([
-            openButton.topAnchor.constraint(equalTo: sidebarView.topAnchor, constant: 4),
-            openButton.trailingAnchor.constraint(equalTo: sidebarView.trailingAnchor, constant: -6),
-            openButton.widthAnchor.constraint(equalToConstant: 24),
-            openButton.heightAnchor.constraint(equalToConstant: 24),
-
             sidebarStackView.topAnchor.constraint(equalTo: sidebarView.topAnchor, constant: 4),
             sidebarStackView.leadingAnchor.constraint(equalTo: sidebarView.leadingAnchor),
             sidebarStackView.trailingAnchor.constraint(equalTo: sidebarView.trailingAnchor),
