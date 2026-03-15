@@ -77,7 +77,7 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
     private let sidebarView = NSView()
     private let sidebarStackView = ReorderableStackView()
     private let rightPane = NSView()
-    private let tabBar = NSStackView()          // horizontal tab bar
+    private let tabBar = ReorderableHStackView()  // horizontal tab bar
     private let terminalContainerView = NSView()
     private var currentTerminalView: TerminalNSView?
     private var welcomeLabel: NSTextField?
@@ -913,6 +913,13 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
             tabBar.addArrangedSubview(tabView)
         }
 
+        // Set up drag-to-reorder
+        tabBar.tabCount = project.tabs.count
+        tabBar.registerForDraggedTypes([deckardTabDragType])
+        tabBar.onReorder = { [weak self] from, to in
+            self?.reorderTab(from: from, to: to)
+        }
+
         // Add "+" button
         let addButton = AddTabButton(
             leftClickAction: { [weak self] in self?.addTabToCurrentProject(isClaude: true) },
@@ -925,6 +932,28 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         spacer.translatesAutoresizingMaskIntoConstraints = false
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         tabBar.addArrangedSubview(spacer)
+    }
+
+    private func reorderTab(from fromIndex: Int, to toIndex: Int) {
+        guard let project = currentProject else { return }
+        guard fromIndex != toIndex,
+              fromIndex >= 0, fromIndex < project.tabs.count,
+              toIndex >= 0, toIndex <= project.tabs.count else { return }
+
+        let tab = project.tabs.remove(at: fromIndex)
+        let insertAt = toIndex > fromIndex ? toIndex - 1 : toIndex
+        project.tabs.insert(tab, at: min(insertAt, project.tabs.count))
+
+        if project.selectedTabIndex == fromIndex {
+            project.selectedTabIndex = insertAt
+        } else if fromIndex < project.selectedTabIndex && insertAt >= project.selectedTabIndex {
+            project.selectedTabIndex -= 1
+        } else if fromIndex > project.selectedTabIndex && insertAt <= project.selectedTabIndex {
+            project.selectedTabIndex += 1
+        }
+
+        rebuildTabBar()
+        saveState()
     }
 
     @objc private func tabBarClicked(_ sender: HorizontalTabView) {
@@ -1219,7 +1248,9 @@ class TabRowView: NSView, NSTextFieldDelegate, NSDraggingSource {
 // MARK: - HorizontalTabView
 
 /// A single tab in the horizontal tab bar, cmux-style.
-class HorizontalTabView: NSView, NSTextFieldDelegate {
+let deckardTabDragType = NSPasteboard.PasteboardType("com.deckard.tab-reorder")
+
+class HorizontalTabView: NSView, NSTextFieldDelegate, NSDraggingSource {
     let index: Int
     private let label: NSTextField
     private let closeButton: NSButton
@@ -1333,12 +1364,36 @@ class HorizontalTabView: NSView, NSTextFieldDelegate {
         closeButton.isHidden = true
     }
 
+    private var dragStartPoint: NSPoint?
+
     override func mouseDown(with event: NSEvent) {
         if event.clickCount == 2 {
             startEditing()
         } else {
+            dragStartPoint = convert(event.locationInWindow, from: nil)
             _ = target?.perform(clickAction, with: self)
         }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let start = dragStartPoint else { return }
+        let current = convert(event.locationInWindow, from: nil)
+        guard abs(current.x - start.x) > 5 else { return }
+
+        dragStartPoint = nil
+        let pb = NSPasteboardItem()
+        pb.setString("\(index)", forType: deckardTabDragType)
+        let item = NSDraggingItem(pasteboardWriter: pb)
+        let snapshot = NSImage(size: bounds.size)
+        snapshot.lockFocus()
+        if let ctx = NSGraphicsContext.current?.cgContext { layer?.render(in: ctx) }
+        snapshot.unlockFocus()
+        item.setDraggingFrame(bounds, contents: snapshot)
+        beginDraggingSession(with: [item], event: event, source: self)
+    }
+
+    func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        return .move
     }
 
     private func startEditing() {
@@ -1518,6 +1573,93 @@ class ReorderableStackView: NSStackView {
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         hideIndicator()
         guard let fromStr = sender.draggingPasteboard.string(forType: deckardProjectDragType),
+              let fromIndex = Int(fromStr) else { return false }
+
+        let toIndex = dropIndex(for: sender)
+        if toIndex != fromIndex {
+            onReorder?(fromIndex, toIndex)
+        }
+        return true
+    }
+}
+
+// MARK: - ReorderableHStackView
+
+/// Horizontal stack view that accepts drops for tab reordering.
+class ReorderableHStackView: NSStackView {
+    var onReorder: ((Int, Int) -> Void)?
+    var tabCount: Int = 0  // number of tab views (excluding + button and spacer)
+
+    private let dropIndicator: NSView = {
+        let v = NSView()
+        v.wantsLayer = true
+        v.layer?.backgroundColor = NSColor.selectedContentBackgroundColor.withAlphaComponent(0.6).cgColor
+        v.isHidden = true
+        return v
+    }()
+    private var currentDropIndex: Int = -1
+
+    private func dropIndex(for sender: NSDraggingInfo) -> Int {
+        let location = convert(sender.draggingLocation, from: nil)
+        for i in 0..<tabCount {
+            guard i < arrangedSubviews.count else { break }
+            let view = arrangedSubviews[i]
+            if location.x < view.frame.midX {
+                return i
+            }
+        }
+        return tabCount
+    }
+
+    private func showIndicator(at index: Int) {
+        guard index != currentDropIndex else { return }
+        currentDropIndex = index
+
+        if dropIndicator.superview !== self {
+            dropIndicator.removeFromSuperview()
+            addSubview(dropIndicator)
+        }
+        dropIndicator.isHidden = false
+
+        let xPos: CGFloat
+        if index < tabCount, index < arrangedSubviews.count {
+            xPos = arrangedSubviews[index].frame.minX - 1
+        } else if tabCount > 0, tabCount - 1 < arrangedSubviews.count {
+            xPos = arrangedSubviews[tabCount - 1].frame.maxX + 1
+        } else {
+            xPos = 0
+        }
+        dropIndicator.frame = NSRect(x: xPos, y: 4, width: 2, height: bounds.height - 8)
+    }
+
+    func hideIndicator() {
+        dropIndicator.isHidden = true
+        currentDropIndex = -1
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard sender.draggingPasteboard.types?.contains(deckardTabDragType) == true else { return [] }
+        showIndicator(at: dropIndex(for: sender))
+        return .move
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard sender.draggingPasteboard.types?.contains(deckardTabDragType) == true else { return [] }
+        showIndicator(at: dropIndex(for: sender))
+        return .move
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        hideIndicator()
+    }
+
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        hideIndicator()
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        hideIndicator()
+        guard let fromStr = sender.draggingPasteboard.string(forType: deckardTabDragType),
               let fromIndex = Int(fromStr) else { return false }
 
         let toIndex = dropIndex(for: sender)
