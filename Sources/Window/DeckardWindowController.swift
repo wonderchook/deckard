@@ -67,10 +67,6 @@ struct DefaultTabConfig {
 
 let deckardProjectDragType = NSPasteboard.PasteboardType("com.deckard.project-reorder")
 
-/// Non-draggable view for use in the title bar accessory.
-class NonDraggableView: NSView {
-    override var mouseDownCanMoveWindow: Bool { false }
-}
 
 class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
     private let ghosttyApp: DeckardGhosttyApp
@@ -108,12 +104,6 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         window.minSize = NSSize(width: 600, height: 400)
         window.backgroundColor = ghosttyApp.defaultBackgroundColor
         window.tabbingMode = .disallowed
-
-        // Extend content into the title bar
-        window.titleVisibility = .hidden
-        window.titlebarAppearsTransparent = true
-        window.styleMask.insert(.fullSizeContentView)
-        window.isMovableByWindowBackground = false
 
         super.init(window: window)
 
@@ -211,7 +201,7 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
             openButton.widthAnchor.constraint(equalToConstant: 24),
             openButton.heightAnchor.constraint(equalToConstant: 24),
 
-            sidebarStackView.topAnchor.constraint(equalTo: sidebarView.topAnchor, constant: 28),
+            sidebarStackView.topAnchor.constraint(equalTo: sidebarView.topAnchor, constant: 4),
             sidebarStackView.leadingAnchor.constraint(equalTo: sidebarView.leadingAnchor),
             sidebarStackView.trailingAnchor.constraint(equalTo: sidebarView.trailingAnchor),
 
@@ -236,7 +226,7 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         rightPane.addSubview(terminalContainerView)
 
         NSLayoutConstraint.activate([
-            tabBar.topAnchor.constraint(equalTo: rightPane.topAnchor, constant: 0),
+            tabBar.topAnchor.constraint(equalTo: rightPane.topAnchor),
             tabBar.leadingAnchor.constraint(equalTo: rightPane.leadingAnchor),
             tabBar.trailingAnchor.constraint(equalTo: rightPane.trailingAnchor),
             tabBar.heightAnchor.constraint(equalToConstant: 28),
@@ -263,18 +253,7 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         ])
         self.welcomeLabel = welcome
 
-        // Full-width 1px divider below the title bar / tab bar area
-        let divider = NSView()
-        divider.translatesAutoresizingMaskIntoConstraints = false
-        divider.wantsLayer = true
-        divider.layer?.backgroundColor = NSColor.separatorColor.cgColor
-        contentView.addSubview(divider)
-
         NSLayoutConstraint.activate([
-            divider.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 28),
-            divider.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            divider.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            divider.heightAnchor.constraint(equalToConstant: 1),
         ])
 
         sidebarView.widthAnchor.constraint(greaterThanOrEqualToConstant: 80).isActive = true
@@ -284,16 +263,6 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
             splitView.setPosition(saved > 80 ? saved : sidebarWidth, ofDividerAt: 0)
             sidebarInitialized = true
         }
-
-        // Add a title bar accessory that prevents window dragging in the tab area
-        let accessoryVC = NSTitlebarAccessoryViewController()
-        let nonDraggable = NonDraggableView()
-        nonDraggable.translatesAutoresizingMaskIntoConstraints = false
-        nonDraggable.heightAnchor.constraint(equalToConstant: 28).isActive = true
-        accessoryVC.view = nonDraggable
-        accessoryVC.layoutAttribute = .bottom
-        accessoryVC.fullScreenMinHeight = 28
-        window?.addTitlebarAccessoryViewController(accessoryVC)
 
         window?.makeKeyAndOrderFront(nil)
     }
@@ -395,6 +364,13 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         if project.selectedTabIndex >= 0, project.selectedTabIndex < project.tabs.count {
             showTab(project.tabs[project.selectedTabIndex])
         }
+
+        // Show folder path in title bar
+        let home = NSHomeDirectory()
+        let displayPath = project.path.hasPrefix(home)
+            ? "~" + project.path.dropFirst(home.count)
+            : project.path
+        window?.title = displayPath
 
         updateSidebarSelection()
     }
