@@ -181,7 +181,7 @@ class ProjectPicker: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSTex
     private func autocompleteSelection() {
         let row = tableView.selectedRow
         guard row >= 0, row < filteredProjects.count else { return }
-        let path = filteredProjects[row].path
+        let path = filteredProjects[row].path + "/"
         searchField.stringValue = path
         // Move cursor to end
         searchField.currentEditor()?.selectedRange = NSRange(location: path.count, length: 0)
