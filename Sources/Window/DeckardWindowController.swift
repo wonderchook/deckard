@@ -286,16 +286,22 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         guard let app = ghosttyApp.app else { return }
 
         let surfaceView = TerminalNSView()
-        // Auto-number tabs within the project
+        // Name tabs — only number if there will be more than one of the same type
         let tabName: String
         if let name = name {
             tabName = name
-        } else if isClaude {
-            let count = project.tabs.filter { $0.isClaude }.count + 1
-            tabName = "Claude #\(count)"
         } else {
-            let count = project.tabs.filter { !$0.isClaude }.count + 1
-            tabName = "Terminal #\(count)"
+            let sameType = project.tabs.filter { $0.isClaude == isClaude }
+            let base = isClaude ? "Claude" : "Terminal"
+            if sameType.isEmpty {
+                tabName = base
+            } else {
+                // Rename the first unnumbered one to #1
+                if sameType.count == 1, sameType[0].name == base {
+                    sameType[0].name = "\(base) #1"
+                }
+                tabName = "\(base) #\(sameType.count + 1)"
+            }
         }
         let tab = TabItem(surfaceView: surfaceView, name: tabName, isClaude: isClaude)
 
