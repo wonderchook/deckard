@@ -211,8 +211,8 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         linkLabel.drawsBackground = false
         linkLabel.isSelectable = true
         linkLabel.allowsEditingTextAttributes = true
-        let linkString = NSMutableAttributedString(string: "Made by trailblaze.work")
-        let linkRange = (linkString.string as NSString).range(of: "trailblaze.work")
+        let linkString = NSMutableAttributedString(string: "By Trailblaze")
+        let linkRange = (linkString.string as NSString).range(of: "Trailblaze")
         linkString.addAttributes([
             .link: URL(string: "https://trailblaze.work")!,
             .font: NSFont.systemFont(ofSize: 12),
