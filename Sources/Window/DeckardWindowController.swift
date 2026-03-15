@@ -276,13 +276,12 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
 
     func setTitle(_ title: String, forSurface surface: ghostty_surface_t?) {
         guard let surface = surface else { return }
-        for (i, tab) in tabs.enumerated() {
+        for tab in tabs {
             if tab.surfaceView.surface == surface {
+                // Store the terminal title but don't update the sidebar name.
+                // Tab names are managed by Deckard (numbered by default,
+                // later renamed by the master session).
                 tab.surfaceView.title = title
-                if !tab.nameOverride && !title.isEmpty {
-                    tab.name = title
-                    updateSidebarItem(at: i)
-                }
                 break
             }
         }
