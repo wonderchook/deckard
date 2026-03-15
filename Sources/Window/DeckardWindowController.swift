@@ -355,6 +355,9 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
             tabName = "\(base) #\(count)"
         }
         let tab = TabItem(surfaceView: surfaceView, name: tabName, isClaude: isClaude)
+        if isClaude {
+            tab.badgeState = .waitingForInput  // Claude starts at the interactive prompt
+        }
 
         var envVars: [String: String] = [:]
         if isClaude {
