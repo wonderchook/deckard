@@ -32,7 +32,7 @@ class ProjectPicker: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSTex
 
         // Search field
         searchField = NSTextField()
-        searchField.placeholderString = "Open Claude session in..."
+        searchField.placeholderString = "Open Project..."
         searchField.font = .systemFont(ofSize: 16)
         searchField.translatesAutoresizingMaskIntoConstraints = false
         searchField.focusRingType = .none

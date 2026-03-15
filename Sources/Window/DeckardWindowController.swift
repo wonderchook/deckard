@@ -415,16 +415,7 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
             initialInput = "stty -echo; clear; stty echo\n"
         }
 
-        // Hide surface until shell is ready (title/pwd signal reveals it).
-        // Set the layer opaque background to match terminal BEFORE creating the surface,
-        // so the first Metal frame renders behind the opaque layer.
-        surfaceView.wantsLayer = true
-        surfaceView.layer?.isOpaque = true
-        surfaceView.layer?.backgroundColor = ghosttyApp.defaultBackgroundColor.cgColor
-        surfaceView.isHidden = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak surfaceView] in
-            surfaceView?.isHidden = false
-        }
+        surfaceView.needsOverlay = true  // showTab will add a covering overlay
 
         surfaceView.createSurface(
             app: app,
@@ -502,12 +493,20 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         return projects[selectedProjectIndex]
     }
 
+    private var currentOverlay: NSView?
+
     private func showTab(_ tab: TabItem) {
         welcomeLabel?.isHidden = true
+
+        // Remove previous overlay and terminal
+        currentOverlay?.removeFromSuperview()
+        currentOverlay = nil
         currentTerminalView?.removeFromSuperview()
 
         let view = tab.surfaceView
         view.translatesAutoresizingMaskIntoConstraints = false
+
+        // Add surface view first (bottom)
         terminalContainerView.addSubview(view)
         NSLayoutConstraint.activate([
             view.topAnchor.constraint(equalTo: terminalContainerView.topAnchor),
@@ -516,6 +515,27 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
             view.trailingAnchor.constraint(equalTo: terminalContainerView.trailingAnchor),
         ])
         currentTerminalView = view
+
+        // Add opaque overlay on top if surface isn't ready yet
+        if view.needsOverlay {
+            let overlay = NSView()
+            overlay.wantsLayer = true
+            overlay.layer?.backgroundColor = ghosttyApp.defaultBackgroundColor.cgColor
+            overlay.translatesAutoresizingMaskIntoConstraints = false
+            terminalContainerView.addSubview(overlay, positioned: .above, relativeTo: view)
+            NSLayoutConstraint.activate([
+                overlay.topAnchor.constraint(equalTo: terminalContainerView.topAnchor),
+                overlay.bottomAnchor.constraint(equalTo: terminalContainerView.bottomAnchor),
+                overlay.leadingAnchor.constraint(equalTo: terminalContainerView.leadingAnchor),
+                overlay.trailingAnchor.constraint(equalTo: terminalContainerView.trailingAnchor),
+            ])
+            currentOverlay = overlay
+            // Safety fallback
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self, weak overlay] in
+                overlay?.removeFromSuperview()
+                if self?.currentOverlay === overlay { self?.currentOverlay = nil }
+            }
+        }
 
         window?.makeFirstResponder(view)
     }
@@ -541,8 +561,15 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
     }
 
     private func revealSurface(_ view: TerminalNSView) {
-        guard view.isHidden else { return }
-        view.isHidden = false
+        view.needsOverlay = false
+        guard let overlay = currentOverlay, view === currentTerminalView else { return }
+        currentOverlay = nil
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.1
+            overlay.animator().alphaValue = 0
+        }, completionHandler: {
+            overlay.removeFromSuperview()
+        })
     }
 
     func setTitle(_ title: String, forSurface surface: ghostty_surface_t?) {
