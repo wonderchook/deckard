@@ -53,13 +53,14 @@ class DeckardGhosttyApp {
         }
 
         runtimeConfig.read_clipboard_cb = { userdata, location, state -> Bool in
-            guard let userdata else { return false }
-            let ghosttyApp = Unmanaged<DeckardGhosttyApp>.fromOpaque(userdata).takeUnretainedValue()
+            guard let userdata, let state else { return false }
+            // userdata is the surface's SurfaceCallbackContext
+            let ctx = Unmanaged<SurfaceCallbackContext>.fromOpaque(userdata).takeUnretainedValue()
+            guard let view = ctx.view, let surface = view.surface else { return false }
 
             let pasteboard: NSPasteboard? = (location == GHOSTTY_CLIPBOARD_STANDARD) ? .general : nil
             let value = pasteboard?.string(forType: .string) ?? ""
 
-            guard let surface = ghosttyApp.focusedSurface() else { return false }
             value.withCString { ptr in
                 ghostty_surface_complete_clipboard_request(surface, ptr, state, false)
             }
@@ -67,10 +68,9 @@ class DeckardGhosttyApp {
         }
 
         runtimeConfig.confirm_read_clipboard_cb = { userdata, content, state, _ in
-            guard let content else { return }
-            guard let userdata else { return }
-            let ghosttyApp = Unmanaged<DeckardGhosttyApp>.fromOpaque(userdata).takeUnretainedValue()
-            guard let surface = ghosttyApp.focusedSurface() else { return }
+            guard let content, let userdata, let state else { return }
+            let ctx = Unmanaged<SurfaceCallbackContext>.fromOpaque(userdata).takeUnretainedValue()
+            guard let view = ctx.view, let surface = view.surface else { return }
             ghostty_surface_complete_clipboard_request(surface, content, state, true)
         }
 
