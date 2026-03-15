@@ -595,6 +595,7 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
 
         for ps in projectStates {
             let project = ProjectItem(path: ps.path)
+            project.name = ps.name  // restore custom name if renamed
 
             for ts in ps.tabs {
                 createTabInProject(project, isClaude: ts.isClaude, name: ts.name,
