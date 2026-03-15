@@ -36,11 +36,11 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
     private var selectedTabIndex: Int = -1
 
     // UI components
-    private let splitView = NSSplitView()          // horizontal: sidebar | rightPane
+    private var outerSplitView: NSSplitView!         // vertical: top | master
+    private let splitView = NSSplitView()            // horizontal: sidebar | terminal
     private let sidebarView = NSView()
     private let sidebarScrollView = NSScrollView()
     private let sidebarStackView = NSStackView()
-    private let rightSplitView = NSSplitView()     // vertical: tabs | master
     private let terminalContainerView = NSView()
     private let masterContainerView = NSView()
     private var masterSurfaceView: TerminalNSView?
@@ -99,26 +99,34 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
     private func setupUI() {
         guard let contentView = window?.contentView else { return }
 
-        // Main split: sidebar | terminal
-        splitView.isVertical = true
+        // Outer split: vertical (top/bottom)
+        //   top = (sidebar | tab terminal)
+        //   bottom = master (full width)
+        let outerSplit = NSSplitView()
+        outerSplit.isVertical = false  // top/bottom
+        outerSplit.dividerStyle = .thin
+        outerSplit.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(outerSplit)
+        self.outerSplitView = outerSplit
+
+        NSLayoutConstraint.activate([
+            outerSplit.topAnchor.constraint(equalTo: contentView.topAnchor),
+            outerSplit.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            outerSplit.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            outerSplit.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+        ])
+
+        // Top pane: sidebar | tab terminal
+        splitView.isVertical = true  // left/right
         splitView.dividerStyle = .thin
         splitView.delegate = self
         splitView.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(splitView)
 
-        NSLayoutConstraint.activate([
-            splitView.topAnchor.constraint(equalTo: contentView.topAnchor),
-            splitView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-            splitView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            splitView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-        ])
-
-        // Sidebar container
+        // Sidebar
         sidebarView.translatesAutoresizingMaskIntoConstraints = false
         sidebarView.wantsLayer = true
         sidebarView.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.95).cgColor
 
-        // Stack view for tab buttons (vertical list)
         sidebarStackView.orientation = .vertical
         sidebarStackView.alignment = .leading
         sidebarStackView.spacing = 1
@@ -140,28 +148,25 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
             sidebarStackView.widthAnchor.constraint(equalTo: sidebarScrollView.widthAnchor),
         ])
 
-        // Right pane: vertical split with tab terminal on top, master at bottom
-        rightSplitView.isVertical = false  // vertical split (top/bottom)
-        rightSplitView.dividerStyle = .thin
-        rightSplitView.translatesAutoresizingMaskIntoConstraints = false
-
         terminalContainerView.translatesAutoresizingMaskIntoConstraints = false
+
+        splitView.addArrangedSubview(sidebarView)
+        splitView.addArrangedSubview(terminalContainerView)
+
+        // Bottom pane: master (full width)
         masterContainerView.translatesAutoresizingMaskIntoConstraints = false
         masterContainerView.wantsLayer = true
 
-        rightSplitView.addArrangedSubview(terminalContainerView)
-        rightSplitView.addArrangedSubview(masterContainerView)
-
-        // Add to main split view
-        splitView.addArrangedSubview(sidebarView)
-        splitView.addArrangedSubview(rightSplitView)
+        // Assemble outer split
+        outerSplit.addArrangedSubview(splitView)
+        outerSplit.addArrangedSubview(masterContainerView)
 
         // Set initial sizes after layout
         DispatchQueue.main.async { [self] in
             splitView.setPosition(sidebarWidth, ofDividerAt: 0)
-            let rightHeight = rightSplitView.bounds.height
-            if rightHeight > 0 {
-                rightSplitView.setPosition(rightHeight - masterHeight, ofDividerAt: 0)
+            let totalHeight = outerSplit.bounds.height
+            if totalHeight > 0 {
+                outerSplit.setPosition(totalHeight - masterHeight, ofDividerAt: 0)
             }
         }
     }
@@ -335,11 +340,15 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
 
         var envVars: [String: String] = ["DECKARD_SESSION_TYPE": "master"]
 
-        // Build the MCP config JSON
+        // Build the MCP config JSON with env vars so the MCP server can reach the socket
         var mcpFlag = ""
         if let mcpPath = Bundle.main.resourceURL?.appendingPathComponent("bin/deckard-mcp").path {
-            // Write MCP config to a temp file since the JSON is complex
-            let mcpConfig = ["mcpServers": ["deckard": ["command": mcpPath, "type": "stdio"]]]
+            let socketPath = ControlSocket.shared.path
+            let mcpConfig: [String: Any] = ["mcpServers": ["deckard": [
+                "command": mcpPath,
+                "type": "stdio",
+                "env": ["DECKARD_SOCKET_PATH": socketPath]
+            ]]]
             let mcpConfigPath = "/tmp/deckard-mcp-config.json"
             if let data = try? JSONSerialization.data(withJSONObject: mcpConfig),
                let _ = try? data.write(to: URL(fileURLWithPath: mcpConfigPath)) {
