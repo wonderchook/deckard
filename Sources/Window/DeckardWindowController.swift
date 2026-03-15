@@ -766,7 +766,9 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
 
 // MARK: - TabRowView
 
-class TabRowView: NSView, NSTextFieldDelegate {
+private let deckardProjectDragType = NSPasteboard.PasteboardType("com.deckard.project-reorder")
+
+class TabRowView: NSView, NSTextFieldDelegate, NSDraggingSource {
     var title: String {
         didSet { label.stringValue = title }
     }
@@ -780,11 +782,13 @@ class TabRowView: NSView, NSTextFieldDelegate {
         }
     }
     var onRename: ((String) -> Void)?
+    var onReorder: ((Int, Int) -> Void)?  // (fromIndex, toIndex)
     let index: Int
     private let label: NSTextField
     private let badgeDot: NSView
     private weak var target: AnyObject?
     private let action: Selector
+    private var dragStartPoint: NSPoint?
 
     private var badgeColor: NSColor {
         switch badgeState {
@@ -847,8 +851,35 @@ class TabRowView: NSView, NSTextFieldDelegate {
         if event.clickCount == 2 {
             startEditing()
         } else {
+            dragStartPoint = convert(event.locationInWindow, from: nil)
             _ = target?.perform(action, with: self)
         }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let start = dragStartPoint else { return }
+        let current = convert(event.locationInWindow, from: nil)
+        let distance = abs(current.y - start.y)
+        guard distance > 4 else { return }  // minimum drag threshold
+
+        dragStartPoint = nil
+        let item = NSDraggingItem(pasteboardWriter: "\(index)" as NSString)
+        item.setDraggingFrame(bounds, contents: snapshot())
+        beginDraggingSession(with: [item], event: event, source: self)
+    }
+
+    func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        return .move
+    }
+
+    private func snapshot() -> NSImage {
+        let image = NSImage(size: bounds.size)
+        image.lockFocus()
+        if let ctx = NSGraphicsContext.current?.cgContext {
+            layer?.render(in: ctx)
+        }
+        image.unlockFocus()
+        return image
     }
 
     private func startEditing() {
@@ -905,6 +936,7 @@ class HorizontalTabView: NSView, NSTextFieldDelegate {
     private var rawName: String  // name without icon prefix
 
     private var displayTitle: String
+    private var editWidthConstraint: NSLayoutConstraint?
 
     init(displayTitle: String, editableName: String, isSelected: Bool, index: Int, target: AnyObject,
          clickAction: Selector, closeAction: Selector) {
@@ -968,24 +1000,37 @@ class HorizontalTabView: NSView, NSTextFieldDelegate {
     }
 
     private func startEditing() {
+        isEditing = true
+        let w = max(label.fittingSize.width + 16, 80)
+        editWidthConstraint = label.widthAnchor.constraint(equalToConstant: w)
+        editWidthConstraint?.isActive = true
+
         label.isEditable = true
         label.isSelectable = true
+        label.isBezeled = true
+        label.bezelStyle = .roundedBezel
         label.stringValue = rawName
         label.delegate = self
         label.becomeFirstResponder()
         label.currentEditor()?.selectAll(nil)
     }
 
+    private var isEditing = false
+
     private func finishEditing() {
+        guard isEditing else { return }
+        isEditing = false
+        editWidthConstraint?.isActive = false
+        editWidthConstraint = nil
         label.isEditable = false
         label.isSelectable = false
+        label.isBezeled = false
         let newName = label.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         if !newName.isEmpty && newName != rawName {
             rawName = newName
-            onRename?(newName)
-            // rebuild will be triggered by onRename which calls rebuildTabBar
+            onRename?(newName)  // triggers rebuildTabBar which recreates this view
         } else {
-            label.stringValue = displayTitle
+            label.stringValue = displayTitle  // restore icon prefix
         }
     }
 
