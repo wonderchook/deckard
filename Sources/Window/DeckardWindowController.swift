@@ -155,7 +155,7 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         sidebarView.addSubview(hint)
 
         NSLayoutConstraint.activate([
-            sidebarStackView.topAnchor.constraint(equalTo: sidebarView.topAnchor, constant: 8),
+            sidebarStackView.topAnchor.constraint(equalTo: sidebarView.topAnchor, constant: 0),
             sidebarStackView.leadingAnchor.constraint(equalTo: sidebarView.leadingAnchor),
             sidebarStackView.trailingAnchor.constraint(equalTo: sidebarView.trailingAnchor),
 
@@ -181,7 +181,7 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
             tabBar.topAnchor.constraint(equalTo: rightPane.topAnchor),
             tabBar.leadingAnchor.constraint(equalTo: rightPane.leadingAnchor),
             tabBar.trailingAnchor.constraint(equalTo: rightPane.trailingAnchor),
-            tabBar.heightAnchor.constraint(equalToConstant: 30),
+            tabBar.heightAnchor.constraint(equalToConstant: 28),
 
             terminalContainerView.topAnchor.constraint(equalTo: tabBar.bottomAnchor),
             terminalContainerView.leadingAnchor.constraint(equalTo: rightPane.leadingAnchor),
@@ -631,8 +631,12 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         for (i, project) in projects.enumerated() {
             let row = TabRowView(title: project.name, bold: false, index: i,
                                  target: self, action: #selector(projectRowClicked(_:)))
-            // Show badge from the "worst" tab state in the project
             row.badgeState = worstBadge(in: project)
+            row.onRename = { [weak self] newName in
+                guard let self = self, i < self.projects.count else { return }
+                self.projects[i].name = newName
+                self.saveState()
+            }
             sidebarStackView.addArrangedSubview(row)
             row.leadingAnchor.constraint(equalTo: sidebarStackView.leadingAnchor).isActive = true
             row.trailingAnchor.constraint(equalTo: sidebarStackView.trailingAnchor).isActive = true
@@ -685,6 +689,13 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
                 clickAction: #selector(tabBarClicked(_:)),
                 closeAction: #selector(tabBarCloseClicked(_:))
             )
+            tabView.onRename = { [weak self] newName in
+                guard let self = self, let project = self.currentProject,
+                      i < project.tabs.count else { return }
+                project.tabs[i].name = newName
+                self.rebuildTabBar()
+                self.saveState()
+            }
             tabBar.addArrangedSubview(tabView)
         }
 
@@ -754,7 +765,7 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
 
 // MARK: - TabRowView
 
-class TabRowView: NSView {
+class TabRowView: NSView, NSTextFieldDelegate {
     var title: String {
         didSet { label.stringValue = title }
     }
@@ -767,6 +778,7 @@ class TabRowView: NSView {
             badgeDot.needsDisplay = true
         }
     }
+    var onRename: ((String) -> Void)?
     let index: Int
     private let label: NSTextField
     private let badgeDot: NSView
@@ -831,20 +843,65 @@ class TabRowView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        _ = target?.perform(action, with: self)
+        if event.clickCount == 2 {
+            startEditing()
+        } else {
+            _ = target?.perform(action, with: self)
+        }
+    }
+
+    private func startEditing() {
+        label.isEditable = true
+        label.isSelectable = true
+        label.delegate = self
+        label.becomeFirstResponder()
+        label.currentEditor()?.selectAll(nil)
+    }
+
+    private func finishEditing() {
+        label.isEditable = false
+        label.isSelectable = false
+        let newName = label.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !newName.isEmpty && newName != title {
+            title = newName
+            onRename?(newName)
+        } else {
+            label.stringValue = title
+        }
+    }
+
+    func controlTextDidEndEditing(_ obj: Notification) {
+        finishEditing()
+    }
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        if commandSelector == #selector(insertNewline(_:)) {
+            finishEditing()
+            window?.makeFirstResponder(nil)
+            return true
+        }
+        if commandSelector == #selector(cancelOperation(_:)) {
+            label.stringValue = title
+            label.isEditable = false
+            window?.makeFirstResponder(nil)
+            return true
+        }
+        return false
     }
 }
 
 // MARK: - HorizontalTabView
 
 /// A single tab in the horizontal tab bar, cmux-style.
-class HorizontalTabView: NSView {
+class HorizontalTabView: NSView, NSTextFieldDelegate {
     let index: Int
     private let label: NSTextField
     private let closeButton: NSButton
     private weak var target: AnyObject?
     private let clickAction: Selector
     private var isSelected: Bool
+    var onRename: ((String) -> Void)?
+    private var rawName: String  // name without icon prefix
 
     init(title: String, isSelected: Bool, index: Int, target: AnyObject,
          clickAction: Selector, closeAction: Selector) {
@@ -852,6 +909,7 @@ class HorizontalTabView: NSView {
         self.isSelected = isSelected
         self.target = target
         self.clickAction = clickAction
+        self.rawName = title
 
         label = NSTextField(labelWithString: title)
         label.font = .systemFont(ofSize: 12)
@@ -896,7 +954,49 @@ class HorizontalTabView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     override func mouseDown(with event: NSEvent) {
-        _ = target?.perform(clickAction, with: self)
+        if event.clickCount == 2 {
+            startEditing()
+        } else {
+            _ = target?.perform(clickAction, with: self)
+        }
+    }
+
+    private func startEditing() {
+        label.isEditable = true
+        label.isSelectable = true
+        label.stringValue = rawName  // show raw name without icon prefix
+        label.delegate = self
+        label.becomeFirstResponder()
+        label.currentEditor()?.selectAll(nil)
+    }
+
+    private func finishEditing() {
+        label.isEditable = false
+        label.isSelectable = false
+        let newName = label.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !newName.isEmpty {
+            rawName = newName
+            onRename?(newName)
+        }
+        // Restore display with icon prefix (rebuild will handle this)
+    }
+
+    func controlTextDidEndEditing(_ obj: Notification) {
+        finishEditing()
+    }
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy sel: Selector) -> Bool {
+        if sel == #selector(insertNewline(_:)) {
+            finishEditing()
+            window?.makeFirstResponder(nil)
+            return true
+        }
+        if sel == #selector(cancelOperation(_:)) {
+            label.isEditable = false
+            window?.makeFirstResponder(nil)
+            return true
+        }
+        return false
     }
 }
 
