@@ -98,6 +98,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         fileMenu.addItem(termItem)
         fileMenu.addItem(.separator())
         fileMenu.addItem(withTitle: "Close Tab", action: #selector(closeCurrentTab), keyEquivalent: "w")
+        fileMenu.addItem(.separator())
+
+        // Tab navigation — standard macOS shortcuts
+        let nextTabItem = NSMenuItem(title: "Next Tab", action: #selector(selectNextTab), keyEquivalent: "]")
+        nextTabItem.keyEquivalentModifierMask = [.command, .shift]
+        fileMenu.addItem(nextTabItem)
+        let prevTabItem = NSMenuItem(title: "Previous Tab", action: #selector(selectPrevTab), keyEquivalent: "[")
+        prevTabItem.keyEquivalentModifierMask = [.command, .shift]
+        fileMenu.addItem(prevTabItem)
+        fileMenu.addItem(.separator())
+
+        // Cmd+1-9 for direct tab access
+        for i in 1...9 {
+            let item = NSMenuItem(title: "Tab \(i)", action: #selector(selectTabByNumber(_:)), keyEquivalent: "\(i)")
+            item.tag = i - 1
+            fileMenu.addItem(item)
+        }
+
         fileMenuItem.submenu = fileMenu
         mainMenu.addItem(fileMenuItem)
 
@@ -147,6 +165,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func focusMasterSession() {
         windowController?.focusMasterSession()
+    }
+
+    @objc private func selectNextTab() {
+        windowController?.selectNextTab()
+    }
+
+    @objc private func selectPrevTab() {
+        windowController?.selectPrevTab()
+    }
+
+    @objc private func selectTabByNumber(_ sender: NSMenuItem) {
+        windowController?.selectTab(at: sender.tag)
     }
 
     @objc private func showSettings() {

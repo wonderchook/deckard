@@ -282,6 +282,16 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         updateSidebarSelection()
     }
 
+    func selectNextTab() {
+        guard !tabs.isEmpty else { return }
+        selectTab(at: (selectedTabIndex + 1) % tabs.count)
+    }
+
+    func selectPrevTab() {
+        guard !tabs.isEmpty else { return }
+        selectTab(at: (selectedTabIndex - 1 + tabs.count) % tabs.count)
+    }
+
     func focusMasterSession() {
         if let masterIndex = tabs.firstIndex(where: { $0.isMaster }) {
             selectTab(at: masterIndex)
