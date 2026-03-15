@@ -12,7 +12,6 @@ find_real_claude() {
     return 1
 }
 
-# Pass through if not in a Deckard terminal or hooks are disabled.
 if [[ -z "$DECKARD_SURFACE_ID" || "$DECKARD_HOOKS_DISABLED" == "1" ]]; then
     REAL_CLAUDE="$(find_real_claude)" || { echo "Error: claude not found in PATH" >&2; exit 127; }
     exec "$REAL_CLAUDE" "$@"
@@ -36,10 +35,13 @@ for arg in "$@"; do
     esac
 done
 
-# Create a per-surface hook helper so each tab gets its own hooks.
 SURFACE_ID="$DECKARD_SURFACE_ID"
 SOCKET_PATH="$DECKARD_SOCKET_PATH"
+CWD="$(pwd)"
 HOOK_HELPER="/tmp/deckard-hook-${SURFACE_ID}.sh"
+
+# Encode the CWD like Claude does: /Users/foo/bar → -Users-foo-bar
+ENCODED_CWD=$(echo "$CWD" | sed 's|/|-|g')
 
 cat > "$HOOK_HELPER" << HOOKEOF
 #!/bin/bash
@@ -50,21 +52,14 @@ SOCKET="$SOCKET_PATH"
 
 EXTRA=""
 if [[ "\$EVENT" == "session-start" ]]; then
-    SESSION_FILE="\$HOME/.claude/sessions/\$PPID.json"
-    if [[ -f "\$SESSION_FILE" ]]; then
-        SID=\$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['sessionId'])" "\$SESSION_FILE" 2>/dev/null)
-    fi
-    if [[ -z "\$SID" ]]; then
-        for f in \$(ls -t "\$HOME/.claude/sessions/"*.json 2>/dev/null | head -5); do
-            CPID=\$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['pid'])" "\$f" 2>/dev/null)
-            if [[ -n "\$CPID" ]] && kill -0 "\$CPID" 2>/dev/null; then
-                SID=\$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['sessionId'])" "\$f" 2>/dev/null)
-                [[ -n "\$SID" ]] && break
-            fi
-        done
-    fi
-    if [[ -n "\$SID" ]]; then
-        EXTRA=",\"sessionId\":\"\$SID\""
+    # Find the session ID from the most recently modified JSONL in this project
+    PROJECT_DIR="\$HOME/.claude/projects/$ENCODED_CWD"
+    if [[ -d "\$PROJECT_DIR" ]]; then
+        NEWEST=\$(ls -t "\$PROJECT_DIR"/*.jsonl 2>/dev/null | head -1)
+        if [[ -n "\$NEWEST" ]]; then
+            SID=\$(basename "\$NEWEST" .jsonl)
+            EXTRA=",\"sessionId\":\"\$SID\""
+        fi
     fi
 fi
 

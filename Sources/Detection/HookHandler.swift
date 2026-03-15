@@ -11,7 +11,7 @@ class HookHandler {
 
         case "hook.session-start":
             if let surfaceId = message.surfaceId {
-                windowController?.updateBadge(forSurfaceId: surfaceId, state: .thinking)
+                windowController?.updateBadge(forSurfaceId: surfaceId, state: .waitingForInput)
                 // Capture the real session ID from Claude Code
                 if let sessionId = message.sessionId {
                     windowController?.updateSessionId(forSurfaceId: surfaceId, sessionId: sessionId)

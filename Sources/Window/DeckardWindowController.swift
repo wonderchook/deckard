@@ -242,7 +242,7 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
     // MARK: - NSSplitViewDelegate
 
     func splitView(_ splitView: NSSplitView, constrainMinCoordinate p: CGFloat, ofSubviewAt i: Int) -> CGFloat { 80 }
-    func splitView(_ splitView: NSSplitView, constrainMaxCoordinate p: CGFloat, ofSubviewAt i: Int) -> CGFloat { min(300, splitView.bounds.width * 0.3) }
+    func splitView(_ splitView: NSSplitView, constrainMaxCoordinate p: CGFloat, ofSubviewAt i: Int) -> CGFloat { splitView.bounds.width * 0.5 }
     func splitView(_ splitView: NSSplitView, canCollapseSubview s: NSView) -> Bool { false }
 
     // MARK: - Project Management
@@ -896,14 +896,14 @@ class TabRowView: NSView, NSTextFieldDelegate, NSDraggingSource {
 
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: 28),
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor),
-            label.trailingAnchor.constraint(lessThanOrEqualTo: badgeContainer.leadingAnchor, constant: -4),
-            badgeContainer.trailingAnchor.constraint(equalTo: closeButton.leadingAnchor, constant: -4),
-            badgeContainer.centerYAnchor.constraint(equalTo: centerYAnchor),
-            closeButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+            closeButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
             closeButton.centerYAnchor.constraint(equalTo: centerYAnchor),
             closeButton.widthAnchor.constraint(equalToConstant: 16),
+            label.leadingAnchor.constraint(equalTo: closeButton.trailingAnchor, constant: 2),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: badgeContainer.leadingAnchor, constant: -4),
+            badgeContainer.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            badgeContainer.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
 
         let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
