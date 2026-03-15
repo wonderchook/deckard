@@ -85,11 +85,12 @@ class ProjectPicker: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSTex
     }
 
     /// Show the picker centered on the given window.
-    func show(relativeTo window: NSWindow?, completion: @escaping Completion) {
+    /// `excludePaths` are already-open projects that should be hidden from the list.
+    func show(relativeTo window: NSWindow?, excludePaths: Set<String> = [], completion: @escaping Completion) {
         self.completion = completion
 
-        // Load projects
-        allProjects = Self.loadRecentProjects()
+        // Load projects, excluding already-open ones
+        allProjects = Self.loadRecentProjects().filter { !excludePaths.contains($0.path) }
         filteredProjects = allProjects
         tableView.reloadData()
 

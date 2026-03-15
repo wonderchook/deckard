@@ -243,6 +243,10 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
 
     // MARK: - Project Management
 
+    func openProjectPaths() -> [String] {
+        return projects.map { $0.path }
+    }
+
     func openProject(path: String) {
         // Check if project already open — just switch to it
         if let idx = projects.firstIndex(where: { $0.path == path }) {

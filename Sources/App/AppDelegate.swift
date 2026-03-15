@@ -176,7 +176,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openProject() {
-        projectPicker.show(relativeTo: windowController?.window) { [weak self] path in
+        let openPaths = Set(windowController?.openProjectPaths() ?? [])
+        projectPicker.show(relativeTo: windowController?.window, excludePaths: openPaths) { [weak self] path in
             guard let path = path else { return }
             self?.windowController?.openProject(path: path)
         }
