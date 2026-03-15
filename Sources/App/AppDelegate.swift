@@ -11,6 +11,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.shared = self
 
+        // Set app icon from bundle resources
+        if let iconPath = Bundle.main.resourceURL?.appendingPathComponent("AppIcon.icns").path,
+           let icon = NSImage(contentsOfFile: iconPath) {
+            NSApp.applicationIconImage = icon
+        }
+
         // Set up the Ghostty app wrapper (creates ghostty_app_t with callbacks).
         ghosttyApp = DeckardGhosttyApp()
         guard ghosttyApp.app != nil else {

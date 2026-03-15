@@ -125,7 +125,8 @@
 			buildConfigurationList = D4DD7E2E99183880C744CD06 /* Build configuration list for PBXNativeTarget "Deckard" */;
 			buildPhases = (
 				BCA6BE9F72201B4BE87DEA5C /* Sources */,
-				C139A5C53E07B43CDC526181 /* Copy Claude Wrapper */,
+				067A73B3DFACE43E16847EC2 /* Copy Resources */,
+				5F4D41CAC0165B5C0FC120FE /* Set App Icon */,
 			);
 			buildRules = (
 			);
@@ -167,7 +168,7 @@
 /* End PBXProject section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		C139A5C53E07B43CDC526181 /* Copy Claude Wrapper */ = {
+		067A73B3DFACE43E16847EC2 /* Copy Resources */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -176,7 +177,7 @@
 			);
 			inputPaths = (
 			);
-			name = "Copy Claude Wrapper";
+			name = "Copy Resources";
 			outputFileListPaths = (
 			);
 			outputPaths = (
@@ -184,6 +185,24 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "mkdir -p \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/bin\"\ncp -f \"${PROJECT_DIR}/Resources/AppIcon.icns\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/AppIcon.icns\"\ncp -f \"${PROJECT_DIR}/Resources/bin/claude\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/bin/claude\"\ncp -f \"${PROJECT_DIR}/Resources/bin/deckard-mcp\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/bin/deckard-mcp\"\nchmod +x \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/bin/claude\"\nchmod +x \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/bin/deckard-mcp\"\n";
+		};
+		5F4D41CAC0165B5C0FC120FE /* Set App Icon */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Set App Icon";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/usr/libexec/PlistBuddy -c \"Add :CFBundleIconFile string AppIcon\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\" 2>/dev/null\n/usr/libexec/PlistBuddy -c \"Set :CFBundleIconFile AppIcon\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\" 2>/dev/null\nexit 0\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -282,7 +301,6 @@
 					"$(PROJECT_DIR)/ghostty/macos/GhosttyKit.xcframework/macos-arm64/Headers",
 				);
 				INFOPLIST_GENERATION_MODE = GeneratedFile;
-				INFOPLIST_KEY_CFBundleIconFile = AppIcon;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -396,7 +414,6 @@
 					"$(PROJECT_DIR)/ghostty/macos/GhosttyKit.xcframework/macos-arm64/Headers",
 				);
 				INFOPLIST_GENERATION_MODE = GeneratedFile;
-				INFOPLIST_KEY_CFBundleIconFile = AppIcon;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

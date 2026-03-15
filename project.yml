@@ -29,7 +29,13 @@ targets:
           cp -f "${PROJECT_DIR}/Resources/bin/deckard-mcp" "${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/bin/deckard-mcp"
           chmod +x "${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/bin/claude"
           chmod +x "${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/bin/deckard-mcp"
-        name: Copy Claude Wrapper
+        name: Copy Resources
+    postBuildScripts:
+      - script: |
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "${TARGET_BUILD_DIR}/${INFOPLIST_PATH}" 2>/dev/null
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile AppIcon" "${TARGET_BUILD_DIR}/${INFOPLIST_PATH}" 2>/dev/null
+          exit 0
+        name: Set App Icon
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.deckard.app
@@ -38,8 +44,6 @@ targets:
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: 1
         GENERATE_INFOPLIST_FILE: true
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        INFOPLIST_KEY_CFBundleIconFile: AppIcon
         SWIFT_OBJC_BRIDGING_HEADER: Sources/App/Deckard-Bridging-Header.h
         FRAMEWORK_SEARCH_PATHS:
           - "$(PROJECT_DIR)/ghostty/macos/GhosttyKit.xcframework/macos-arm64"
