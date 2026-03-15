@@ -1251,6 +1251,7 @@ class TabRowView: NSView, NSTextFieldDelegate, NSDraggingSource {
 let deckardTabDragType = NSPasteboard.PasteboardType("com.deckard.tab-reorder")
 
 class HorizontalTabView: NSView, NSTextFieldDelegate, NSDraggingSource {
+    override var mouseDownCanMoveWindow: Bool { false }
     let index: Int
     private let label: NSTextField
     private let closeButton: NSButton
@@ -1459,6 +1460,7 @@ class HorizontalTabView: NSView, NSTextFieldDelegate, NSDraggingSource {
 
 /// + button: left-click adds Claude tab, right-click adds terminal tab.
 class AddTabButton: NSView {
+    override var mouseDownCanMoveWindow: Bool { false }
     private let leftClickAction: () -> Void
     private let rightClickAction: () -> Void
     private let label: NSTextField
@@ -1587,6 +1589,7 @@ class ReorderableStackView: NSStackView {
 
 /// Horizontal stack view that accepts drops for tab reordering.
 class ReorderableHStackView: NSStackView {
+    override var mouseDownCanMoveWindow: Bool { false }
     var onReorder: ((Int, Int) -> Void)?
     var tabCount: Int = 0  // number of tab views (excluding + button and spacer)
 
