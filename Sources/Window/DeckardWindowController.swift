@@ -186,11 +186,7 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         sidebarStackView.translatesAutoresizingMaskIntoConstraints = false
         sidebarView.addSubview(sidebarStackView)
 
-        // Toolbar with open folder button
-        let toolbar = NSToolbar(identifier: "DeckardToolbar")
-        toolbar.displayMode = .iconOnly
-        window?.toolbar = toolbar
-        // Add open button to the toolbar via title bar accessory
+        // Open folder button in title bar (right side)
         let openButton = NSButton(image: NSImage(systemSymbolName: "folder.badge.plus", accessibilityDescription: "Open Folder")!, target: self, action: #selector(openProjectClicked))
         openButton.bezelStyle = .recessed
         openButton.isBordered = false
@@ -199,16 +195,8 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         openButton.translatesAutoresizingMaskIntoConstraints = false
 
         let accessoryVC = NSTitlebarAccessoryViewController()
-        let accessoryContainer = NSView(frame: NSRect(x: 0, y: 0, width: 36, height: 28))
-        accessoryContainer.addSubview(openButton)
-        NSLayoutConstraint.activate([
-            openButton.centerXAnchor.constraint(equalTo: accessoryContainer.centerXAnchor),
-            openButton.centerYAnchor.constraint(equalTo: accessoryContainer.centerYAnchor),
-            openButton.widthAnchor.constraint(equalToConstant: 28),
-            openButton.heightAnchor.constraint(equalToConstant: 22),
-        ])
-        accessoryVC.view = accessoryContainer
         accessoryVC.layoutAttribute = .right
+        accessoryVC.view = openButton
         window?.addTitlebarAccessoryViewController(accessoryVC)
 
         NSLayoutConstraint.activate([
