@@ -18,6 +18,16 @@ find_real_claude() {
     return 1
 }
 
+# Send a JSON message to the Deckard control socket.
+deckard_hook() {
+    local cmd="$1"
+    local extra="$2"
+    local json="{\"command\":\"${cmd}\",\"surfaceId\":\"${DECKARD_SURFACE_ID}\"${extra}}"
+    if [[ -n "$DECKARD_SOCKET_PATH" ]] && [[ -S "$DECKARD_SOCKET_PATH" ]]; then
+        echo "$json" | nc -U "$DECKARD_SOCKET_PATH" -w 1 2>/dev/null &
+    fi
+}
+
 # Pass through if not in a Deckard terminal or hooks are disabled.
 if [[ -z "$DECKARD_SURFACE_ID" || "$DECKARD_HOOKS_DISABLED" == "1" ]]; then
     REAL_CLAUDE="$(find_real_claude)" || { echo "Error: claude not found in PATH" >&2; exit 127; }
@@ -32,8 +42,7 @@ case "${1:-}" in
     mcp|config|api-key) exec "$REAL_CLAUDE" "$@" ;;
 esac
 
-# Unset CLAUDECODE to avoid "nested session" detection — Deckard terminals are
-# independent sessions even when the parent shell was launched from Claude Code.
+# Unset CLAUDECODE to avoid "nested session" detection.
 unset CLAUDECODE
 
 # Check if the user already specified a session/resume flag.
@@ -47,8 +56,19 @@ for arg in "$@"; do
     esac
 done
 
-# Build hooks settings JSON.
-HOOKS_JSON='{"hooks":{"SessionStart":[{"matcher":"","hooks":[{"type":"command","command":"echo DECKARD_HOOK:session-start:$DECKARD_SURFACE_ID","timeout":10}]}],"Stop":[{"matcher":"","hooks":[{"type":"command","command":"echo DECKARD_HOOK:stop:$DECKARD_SURFACE_ID","timeout":10}]}],"Notification":[{"matcher":"","hooks":[{"type":"command","command":"echo DECKARD_HOOK:notification:$DECKARD_SURFACE_ID","timeout":10}]}],"UserPromptSubmit":[{"matcher":"","hooks":[{"type":"command","command":"echo DECKARD_HOOK:user-prompt-submit:$DECKARD_SURFACE_ID","timeout":10}]}]}}'
+# Build hooks that send JSON to the Deckard control socket.
+# We use a bash function defined above, invoked via the wrapper script itself.
+HOOK_CMD_BASE="echo '{\"command\":\"hook.EVENT\",\"surfaceId\":\"$DECKARD_SURFACE_ID\"}' | nc -U $DECKARD_SOCKET_PATH -w 1 2>/dev/null"
+
+SESSION_START_CMD="echo '{\"command\":\"hook.session-start\",\"surfaceId\":\"$DECKARD_SURFACE_ID\"}' | nc -U $DECKARD_SOCKET_PATH -w 1 2>/dev/null"
+STOP_CMD="echo '{\"command\":\"hook.stop\",\"surfaceId\":\"$DECKARD_SURFACE_ID\"}' | nc -U $DECKARD_SOCKET_PATH -w 1 2>/dev/null"
+NOTIFICATION_CMD="echo '{\"command\":\"hook.notification\",\"surfaceId\":\"$DECKARD_SURFACE_ID\"}' | nc -U $DECKARD_SOCKET_PATH -w 1 2>/dev/null"
+USER_PROMPT_CMD="echo '{\"command\":\"hook.user-prompt-submit\",\"surfaceId\":\"$DECKARD_SURFACE_ID\"}' | nc -U $DECKARD_SOCKET_PATH -w 1 2>/dev/null"
+
+HOOKS_JSON=$(cat <<ENDJSON
+{"hooks":{"SessionStart":[{"matcher":"","hooks":[{"type":"command","command":"$SESSION_START_CMD","timeout":10}]}],"Stop":[{"matcher":"","hooks":[{"type":"command","command":"$STOP_CMD","timeout":10}]}],"Notification":[{"matcher":"","hooks":[{"type":"command","command":"$NOTIFICATION_CMD","timeout":10}]}],"UserPromptSubmit":[{"matcher":"","hooks":[{"type":"command","command":"$USER_PROMPT_CMD","timeout":10}]}]}}
+ENDJSON
+)
 
 if [[ "$SKIP_SESSION_ID" == true ]]; then
     exec "$REAL_CLAUDE" --settings "$HOOKS_JSON" "$@"

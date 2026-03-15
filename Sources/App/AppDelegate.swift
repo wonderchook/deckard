@@ -6,6 +6,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private(set) var ghosttyApp: DeckardGhosttyApp!
     var windowController: DeckardWindowController?
+    private let hookHandler = HookHandler()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.shared = self
@@ -39,8 +40,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         nc.addObserver(self, selector: #selector(handleNewTab), name: .deckardNewTab, object: nil)
         nc.addObserver(self, selector: #selector(handleCloseTab), name: .deckardCloseTab, object: nil)
 
+        // Start the control socket for hook communication.
+        ControlSocket.shared.start()
+        ControlSocket.shared.onMessage = { [weak self] message, reply in
+            self?.hookHandler.handle(message, reply: reply)
+        }
+
+        // Set socket path in environment for child processes.
+        setenv("DECKARD_SOCKET_PATH", ControlSocket.shared.path, 1)
+
         // Create and show the main window.
         windowController = DeckardWindowController(ghosttyApp: ghosttyApp)
+        hookHandler.windowController = windowController
         windowController?.showWindow(nil)
     }
 
@@ -50,6 +61,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         windowController?.saveState()
+        ControlSocket.shared.stop()
     }
 
     // MARK: - Notification Handlers

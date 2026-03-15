@@ -334,6 +334,35 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         }
     }
 
+    // MARK: - Badge Updates
+
+    func updateBadge(forSurfaceId surfaceIdStr: String, state: TabItem.BadgeState) {
+        guard let surfaceId = UUID(uuidString: surfaceIdStr) else { return }
+        for (i, tab) in tabs.enumerated() {
+            if tab.id == surfaceId {
+                tab.badgeState = state
+                if let row = sidebarStackView.arrangedSubviews[safe: i] as? TabRowView {
+                    row.badgeState = state
+                }
+                break
+            }
+        }
+    }
+
+    func listTabInfo() -> [TabInfo] {
+        return tabs.map { tab in
+            TabInfo(
+                id: tab.id.uuidString,
+                name: tab.name,
+                isClaude: tab.isClaude,
+                isMaster: tab.isMaster,
+                sessionId: tab.sessionId,
+                badgeState: "\(tab.badgeState)",
+                workingDirectory: tab.workingDirectory
+            )
+        }
+    }
+
     // MARK: - State Persistence
 
     func captureState() -> DeckardState {
@@ -495,16 +524,35 @@ class TabRowView: NSView {
     var isSelected: Bool = false {
         didSet { needsDisplay = true }
     }
+    var badgeState: TabItem.BadgeState = .none {
+        didSet { badgeDot.layer?.backgroundColor = badgeColor.cgColor }
+    }
     let index: Int
     private let label: NSTextField
+    private let badgeDot: NSView
     private weak var target: AnyObject?
     private let action: Selector
+
+    private var badgeColor: NSColor {
+        switch badgeState {
+        case .none: return .clear
+        case .active: return .systemGreen
+        case .waitingForInput: return .systemBlue
+        case .needsPermission: return .systemOrange
+        case .error: return .systemRed
+        }
+    }
 
     init(title: String, bold: Bool, index: Int, target: AnyObject, action: Selector) {
         self.title = title
         self.index = index
         self.target = target
         self.action = action
+
+        badgeDot = NSView()
+        badgeDot.wantsLayer = true
+        badgeDot.layer?.cornerRadius = 3.5
+        badgeDot.layer?.backgroundColor = NSColor.clear.cgColor
 
         label = NSTextField(labelWithString: title)
         label.font = bold ? .boldSystemFont(ofSize: 12) : .systemFont(ofSize: 12)
@@ -516,12 +564,18 @@ class TabRowView: NSView {
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
 
+        badgeDot.translatesAutoresizingMaskIntoConstraints = false
         label.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(badgeDot)
         addSubview(label)
 
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: 28),
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            badgeDot.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            badgeDot.centerYAnchor.constraint(equalTo: centerYAnchor),
+            badgeDot.widthAnchor.constraint(equalToConstant: 7),
+            badgeDot.heightAnchor.constraint(equalToConstant: 7),
+            label.leadingAnchor.constraint(equalTo: badgeDot.trailingAnchor, constant: 6),
             label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             label.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
@@ -540,5 +594,12 @@ class TabRowView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         _ = target?.perform(action, with: self)
+    }
+}
+
+// Safe array subscript
+extension Collection {
+    subscript(safe index: Index) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }

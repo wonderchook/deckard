@@ -82,6 +82,7 @@ class TerminalNSView: NSView {
         var allEnvVars = envVars
         allEnvVars["DECKARD_SURFACE_ID"] = surfaceId.uuidString
         allEnvVars["DECKARD_TAB_ID"] = tabId.uuidString
+        allEnvVars["DECKARD_SOCKET_PATH"] = ControlSocket.shared.path
 
         // Prepend our bin/ directory to PATH so our claude wrapper is found first.
         if let binPath = Bundle.main.resourceURL?.appendingPathComponent("bin").path {
