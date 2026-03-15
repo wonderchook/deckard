@@ -1,0 +1,312 @@
+import AppKit
+
+/// A Spotlight-style project picker that appears when creating a new Claude tab.
+/// Shows recent projects from ~/.claude/projects/, sorted by recency.
+class ProjectPicker: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate {
+
+    typealias Completion = (String?) -> Void  // nil = cancelled, String = chosen path
+
+    private let panel: NSPanel
+    private let searchField: NSTextField
+    private let tableView: NSTableView
+    private let scrollView: NSScrollView
+    private var completion: Completion?
+
+    private var allProjects: [(path: String, lastUsed: Date)] = []
+    private var filteredProjects: [(path: String, lastUsed: Date)] = []
+
+    override init() {
+        // Create a floating panel
+        panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 500, height: 350),
+            styleMask: [.titled, .closable, .nonactivatingPanel, .hudWindow],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = ""
+        panel.level = .floating
+        panel.hidesOnDeactivate = false
+        panel.isMovableByWindowBackground = true
+
+        // Search field
+        searchField = NSTextField()
+        searchField.placeholderString = "Open Claude session in..."
+        searchField.font = .systemFont(ofSize: 16)
+        searchField.translatesAutoresizingMaskIntoConstraints = false
+        searchField.focusRingType = .none
+        searchField.bezelStyle = .roundedBezel
+
+        // Table view for project list
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("Project"))
+        column.title = ""
+
+        tableView = NSTableView()
+        tableView.addTableColumn(column)
+        tableView.headerView = nil
+        tableView.rowHeight = 28
+        tableView.selectionHighlightStyle = .regular
+        tableView.allowsEmptySelection = false
+
+        scrollView = NSScrollView()
+        scrollView.documentView = tableView
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.drawsBackground = false
+
+        super.init()
+
+        tableView.dataSource = self
+        tableView.delegate = self
+        searchField.delegate = self
+
+        // Layout
+        let contentView = panel.contentView!
+        contentView.addSubview(searchField)
+        contentView.addSubview(scrollView)
+
+        NSLayoutConstraint.activate([
+            searchField.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
+            searchField.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
+            searchField.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
+            searchField.heightAnchor.constraint(equalToConstant: 30),
+
+            scrollView.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 8),
+            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+        ])
+
+        // Handle Enter and Escape via the search field's action
+        searchField.target = self
+        searchField.action = #selector(searchFieldAction)
+    }
+
+    /// Show the picker centered on the given window.
+    func show(relativeTo window: NSWindow?, completion: @escaping Completion) {
+        self.completion = completion
+
+        // Load projects
+        allProjects = Self.loadRecentProjects()
+        filteredProjects = allProjects
+        tableView.reloadData()
+
+        // Select first row
+        if !filteredProjects.isEmpty {
+            tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+        }
+
+        // Position
+        if let window = window {
+            let windowFrame = window.frame
+            let x = windowFrame.midX - 250
+            let y = windowFrame.midY - 50
+            panel.setFrameOrigin(NSPoint(x: x, y: y))
+        } else {
+            panel.center()
+        }
+
+        panel.makeKeyAndOrderFront(nil)
+        panel.makeFirstResponder(searchField)
+
+        // Monitor for Escape key
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self = self, self.panel.isVisible else { return event }
+
+            if event.keyCode == 53 { // Escape
+                self.cancel()
+                return nil
+            }
+            if event.keyCode == 36 { // Enter
+                self.confirm()
+                return nil
+            }
+            if event.keyCode == 125 { // Down arrow
+                self.moveSelection(by: 1)
+                return nil
+            }
+            if event.keyCode == 126 { // Up arrow
+                self.moveSelection(by: -1)
+                return nil
+            }
+            return event
+        }
+
+        searchField.stringValue = ""
+    }
+
+    private func cancel() {
+        panel.orderOut(nil)
+        completion?(nil)
+        completion = nil
+    }
+
+    private func confirm() {
+        let row = tableView.selectedRow
+        let path: String
+        if row >= 0, row < filteredProjects.count {
+            path = filteredProjects[row].path
+        } else {
+            // Use the text field value as a raw path
+            let text = searchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if text.isEmpty {
+                cancel()
+                return
+            }
+            path = (text as NSString).expandingTildeInPath
+        }
+        panel.orderOut(nil)
+        completion?(path)
+        completion = nil
+    }
+
+    private func moveSelection(by delta: Int) {
+        guard !filteredProjects.isEmpty else { return }
+        let current = tableView.selectedRow
+        let next = max(0, min(filteredProjects.count - 1, current + delta))
+        tableView.selectRowIndexes(IndexSet(integer: next), byExtendingSelection: false)
+        tableView.scrollRowToVisible(next)
+    }
+
+    @objc private func searchFieldAction() {
+        confirm()
+    }
+
+    // MARK: - NSTextFieldDelegate
+
+    func controlTextDidChange(_ obj: Notification) {
+        let query = searchField.stringValue.lowercased()
+        if query.isEmpty {
+            filteredProjects = allProjects
+        } else {
+            filteredProjects = allProjects.filter { project in
+                project.path.lowercased().contains(query)
+            }
+        }
+        tableView.reloadData()
+        if !filteredProjects.isEmpty {
+            tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+        }
+    }
+
+    // MARK: - NSTableViewDataSource
+
+    func numberOfRows(in tableView: NSTableView) -> Int {
+        return filteredProjects.count
+    }
+
+    // MARK: - NSTableViewDelegate
+
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        let id = NSUserInterfaceItemIdentifier("ProjectCell")
+        let project = filteredProjects[row]
+
+        let cell: NSTableCellView
+        if let recycled = tableView.makeView(withIdentifier: id, owner: nil) as? NSTableCellView {
+            cell = recycled
+        } else {
+            cell = NSTableCellView()
+            cell.identifier = id
+            let tf = NSTextField(labelWithString: "")
+            tf.translatesAutoresizingMaskIntoConstraints = false
+            tf.lineBreakMode = .byTruncatingMiddle
+            cell.addSubview(tf)
+            cell.textField = tf
+            NSLayoutConstraint.activate([
+                tf.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 12),
+                tf.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -12),
+                tf.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+            ])
+        }
+
+        // Show shortened path: ~/Documents/project instead of /Users/gilles/Documents/project
+        let home = NSHomeDirectory()
+        let displayPath = project.path.hasPrefix(home)
+            ? "~" + project.path.dropFirst(home.count)
+            : project.path
+
+        cell.textField?.stringValue = displayPath
+        cell.textField?.font = .systemFont(ofSize: 13)
+        return cell
+    }
+
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        // Double-click to confirm
+    }
+
+    // MARK: - Load Projects
+
+    static func loadRecentProjects() -> [(path: String, lastUsed: Date)] {
+        let projectsDir = NSHomeDirectory() + "/.claude/projects"
+        let fm = FileManager.default
+
+        guard let entries = try? fm.contentsOfDirectory(atPath: projectsDir) else { return [] }
+
+        var results: [(path: String, lastUsed: Date)] = []
+
+        for entry in entries {
+            // Decode the encoded path. Claude Code encodes "/" as "-" in directory names.
+            // But folder names themselves can contain hyphens (e.g., "ai-trend-finder").
+            // Strategy: try progressively replacing "-" with "/" from left to right,
+            // keeping the longest valid directory path.
+            guard let decoded = Self.decodeCloudeProjectPath(entry) else { continue }
+
+            // Skip if directory doesn't exist
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: decoded, isDirectory: &isDir), isDir.boolValue else { continue }
+
+            // Find the most recent session file for recency sorting
+            let entryPath = projectsDir + "/" + entry
+            var newestDate = Date.distantPast
+
+            if let files = try? fm.contentsOfDirectory(atPath: entryPath) {
+                for file in files where file.hasSuffix(".jsonl") {
+                    let filePath = entryPath + "/" + file
+                    if let attrs = try? fm.attributesOfItem(atPath: filePath),
+                       let mod = attrs[.modificationDate] as? Date,
+                       mod > newestDate {
+                        newestDate = mod
+                    }
+                }
+            }
+
+            // Only include if it has session history
+            if newestDate != .distantPast {
+                results.append((path: decoded, lastUsed: newestDate))
+            }
+        }
+
+        // Sort by most recently used
+        results.sort { $0.lastUsed > $1.lastUsed }
+        return results
+    }
+
+    /// Decode a Claude Code project directory name back to a filesystem path.
+    /// Claude encodes "/" as "-", so "-Users-gilles-Documents-ai-trend-finder" must
+    /// be decoded by finding which hyphens are path separators and which are literal.
+    /// Strategy: greedily build the path left-to-right, checking if each segment exists.
+    static func decodeCloudeProjectPath(_ encoded: String) -> String? {
+        let stripped = encoded.hasPrefix("-") ? String(encoded.dropFirst()) : encoded
+        let parts = stripped.components(separatedBy: "-")
+        guard !parts.isEmpty else { return nil }
+
+        let fm = FileManager.default
+        var path = ""
+        var segment = parts[0]
+
+        for i in 1..<parts.count {
+            let candidate = path + "/" + segment
+            var isDir: ObjCBool = false
+            if fm.fileExists(atPath: candidate, isDirectory: &isDir), isDir.boolValue {
+                path = candidate
+                segment = parts[i]
+            } else {
+                segment += "-" + parts[i]
+            }
+        }
+
+        // Append final segment
+        path += "/" + segment
+        return path
+    }
+}

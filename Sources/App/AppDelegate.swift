@@ -112,6 +112,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         termItem.keyEquivalentModifierMask = [.command, .shift]
         fileMenu.addItem(termItem)
         fileMenu.addItem(.separator())
+        fileMenu.addItem(withTitle: "Duplicate Tab", action: #selector(duplicateTab), keyEquivalent: "d")
         fileMenu.addItem(withTitle: "Close Tab", action: #selector(closeCurrentTab), keyEquivalent: "w")
         fileMenu.addItem(.separator())
 
@@ -163,8 +164,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Actions
 
+    private let projectPicker = ProjectPicker()
+
     @objc private func newClaudeSession() {
-        windowController?.createTab(claude: true)
+        projectPicker.show(relativeTo: windowController?.window) { [weak self] path in
+            guard let path = path else { return }  // cancelled
+            self?.windowController?.createTab(claude: true, workingDirectory: path)
+        }
     }
 
     @objc private func newTerminal() {
@@ -173,6 +179,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func closeCurrentTab() {
         windowController?.closeCurrentTab()
+    }
+
+    @objc private func duplicateTab() {
+        windowController?.duplicateCurrentTab()
     }
 
     @objc private func selectNextTab() {

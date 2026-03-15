@@ -288,6 +288,12 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         updateSidebarSelection()
     }
 
+    func duplicateCurrentTab() {
+        guard selectedTabIndex >= 0, selectedTabIndex < tabs.count else { return }
+        let current = tabs[selectedTabIndex]
+        createTab(claude: current.isClaude, workingDirectory: current.workingDirectory)
+    }
+
     func selectNextTab() {
         guard !tabs.isEmpty else { return }
         selectTab(at: (selectedTabIndex + 1) % tabs.count)
