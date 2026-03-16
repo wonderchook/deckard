@@ -16,8 +16,8 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Select Xcode 16
-        run: sudo xcode-select -s /Applications/Xcode_16.2.app
+      - name: Select Xcode 26
+        run: sudo xcode-select -s /Applications/Xcode_26.2.app
 
       - name: Install Zig
         uses: mlugg/setup-zig@v2
@@ -27,6 +27,9 @@ jobs:
       - name: Build GhosttyKit
         working-directory: ghostty
         run: zig build -Demit-xcframework -Dxcframework-target=native -Doptimize=ReleaseFast
+
+      - name: Resolve SPM dependencies
+        run: xcodebuild -resolvePackageDependencies -project Deckard.xcodeproj
 
       - name: Extract version
         id: version
@@ -41,8 +44,29 @@ jobs:
             -destination 'platform=macOS' \
             build
 
-      - name: Ad-hoc codesign
-        run: codesign -s - --force --deep build/Build/Products/Release/Deckard.app
+      - name: Import Developer ID certificate
+        if: env.CERTIFICATE_P12 != ''
+        env:
+          CERTIFICATE_P12: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          security create-keychain -p "" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "" "$KEYCHAIN_PATH"
+          echo "$CERTIFICATE_P12" | base64 --decode > $RUNNER_TEMP/certificate.p12
+          security import $RUNNER_TEMP/certificate.p12 -P "$CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+      - name: Codesign app
+        env:
+          DEVELOPER_ID_IDENTITY: ${{ secrets.DEVELOPER_ID_IDENTITY }}
+        run: |
+          IDENTITY="${DEVELOPER_ID_IDENTITY:-"-"}"
+          codesign -s "$IDENTITY" --force --deep \
+            --options runtime \
+            build/Build/Products/Release/Deckard.app
 
       - name: Create DMG
         run: |
@@ -56,6 +80,53 @@ jobs:
             --app-drop-link 450 190 \
             "Deckard-${{ steps.version.outputs.version }}.dmg" \
             build/Build/Products/Release/Deckard.app
+
+      - name: Notarize DMG
+        if: env.APPLE_ID != ''
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          xcrun notarytool submit "Deckard-${{ steps.version.outputs.version }}.dmg" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --wait
+          xcrun stapler staple "Deckard-${{ steps.version.outputs.version }}.dmg"
+
+      - name: Sign update with EdDSA
+        if: env.SPARKLE_EDDSA_KEY != ''
+        id: sparkle_sign
+        env:
+          SPARKLE_EDDSA_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
+        run: |
+          # Download Sparkle tools
+          SPARKLE_VERSION="2.7.5"
+          curl -sL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" | tar xJ -C /tmp
+          # Sign the DMG with EdDSA
+          SIGN_OUTPUT=$(/tmp/bin/sign_update "Deckard-${{ steps.version.outputs.version }}.dmg" --ed-key-file <(echo "$SPARKLE_EDDSA_KEY"))
+          echo "signature=$SIGN_OUTPUT" >> "$GITHUB_OUTPUT"
+
+      - name: Generate appcast entry
+        if: steps.sparkle_sign.outputs.signature != ''
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ github.ref_name }}
+          SIGNATURE: ${{ steps.sparkle_sign.outputs.signature }}
+        run: |
+          python3 scripts/update_appcast.py \
+            --version "$VERSION" \
+            --tag "$TAG" \
+            --signature "$SIGNATURE" \
+            --dmg "Deckard-${VERSION}.dmg"
+
+      - name: Upload appcast
+        if: steps.sparkle_sign.outputs.signature != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: appcast
+          path: appcast.xml
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
