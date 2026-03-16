@@ -1,8 +1,8 @@
 # Deckard
 
-A native macOS terminal manager for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Run multiple Claude Code sessions side by side in a single window with tabs, projects, and session tracking.
+A terminal built for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Deckard is a native macOS app that treats Claude Code sessions as first-class objects — each tab knows whether Claude is thinking, waiting for input, or needs tool approval, and tracks context window usage so you know when a session is running low.
 
-Built with Swift and AppKit. Terminal rendering powered by [Ghostty](https://ghostty.org/).
+Run multiple sessions side by side in a single window with tabs, projects, and session persistence. Built with Swift and AppKit. Terminal rendering powered by [Ghostty](https://ghostty.org/).
 
 [![Download for macOS](https://img.shields.io/badge/Download_for_macOS-v0.1.0-black?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/gi11es/deckard/releases/latest)
 
