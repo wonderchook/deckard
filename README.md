@@ -14,7 +14,6 @@ Built with Swift and AppKit. Terminal rendering powered by [Ghostty](https://gho
 - **Project sidebar** — Organize work by folder. Each project gets its own set of tabs, persisted across restarts.
 - **Context usage tracking** — A progress bar shows how much of Claude's context window the active session has consumed.
 - **Session state detection** — Tab badges show whether Claude is thinking, waiting for input, needs tool permission, or has errored.
-- **macOS notifications** — Get notified when a background tab needs your attention.
 - **GPU-accelerated rendering** — Terminal surfaces are rendered through Metal via Ghostty's libghostty.
 
 ## Requirements
