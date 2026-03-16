@@ -13,6 +13,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.shared = self
 
+        // Set the GHOSTTY_RESOURCES_DIR BEFORE creating the Ghostty app, so theme
+        // resolution works during initial config loading.
+        let devResources = Bundle.main.bundlePath + "/../ghostty/zig-out/share/ghostty"
+        let bundleResources = Bundle.main.resourcePath ?? ""
+        if FileManager.default.fileExists(atPath: devResources) {
+            setenv("GHOSTTY_RESOURCES_DIR", devResources, 1)
+        } else if FileManager.default.fileExists(atPath: bundleResources + "/themes") {
+            setenv("GHOSTTY_RESOURCES_DIR", bundleResources, 1)
+        }
+
         // Set up the Ghostty app wrapper (creates ghostty_app_t with callbacks).
         ghosttyApp = DeckardGhosttyApp()
         guard ghosttyApp.app != nil else {
@@ -25,24 +35,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        // Set the GHOSTTY_RESOURCES_DIR so shell integration, terminfo, and themes work.
-        // Prefer the submodule build path (development), fall back to the app bundle (release).
-        let devResources = Bundle.main.bundlePath + "/../ghostty/zig-out/share/ghostty"
-        let bundleResources = Bundle.main.resourcePath ?? ""
-        if FileManager.default.fileExists(atPath: devResources) {
-            setenv("GHOSTTY_RESOURCES_DIR", devResources, 1)
-        } else if FileManager.default.fileExists(atPath: bundleResources + "/themes") {
-            setenv("GHOSTTY_RESOURCES_DIR", bundleResources, 1)
-        }
-
         // Initialize theme manager and compute initial theme colors.
+        // Note: no notification is posted here — the window controller doesn't exist yet.
+        // It reads ThemeManager.shared.currentColors directly during its init.
         ThemeManager.shared.loadAvailableThemes()
         if let savedTheme = ThemeManager.shared.currentThemeName,
            let themeInfo = ThemeManager.shared.availableThemes.first(where: { $0.name == savedTheme }),
            let colors = ThemeManager.parseThemeColors(at: themeInfo.path) {
-            ThemeManager.shared.updateColors(background: colors.background, foreground: colors.foreground)
+            ThemeManager.shared.currentColors = ThemeColors(background: colors.background, foreground: colors.foreground)
         } else {
-            ThemeManager.shared.updateColors(
+            ThemeManager.shared.currentColors = ThemeColors(
                 background: ghosttyApp.defaultBackgroundColor,
                 foreground: ghosttyApp.defaultForegroundColor
             )

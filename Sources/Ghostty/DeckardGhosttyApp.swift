@@ -9,6 +9,7 @@ class DeckardGhosttyApp {
     private(set) var app: ghostty_app_t?
     private(set) var config: ghostty_config_t?
     private(set) var defaultBackgroundColor: NSColor = .windowBackgroundColor
+    private(set) var defaultForegroundColor: NSColor = .labelColor
     /// Coalesces rapid wakeup signals from libghostty's I/O thread into a single
     /// tick() call on the main thread, preventing main queue starvation during
     /// heavy terminal output.
@@ -43,10 +44,20 @@ class DeckardGhosttyApp {
         }
         ghostty_config_load_default_files(primaryConfig)
         ghostty_config_load_recursive_files(primaryConfig)
+
+        // Load theme override (persisted from Settings → Appearance)
+        let overridePath = ThemeManager.shared.overrideConfigPath
+        if FileManager.default.fileExists(atPath: overridePath) {
+            overridePath.withCString { ptr in
+                ghostty_config_load_file(primaryConfig, ptr)
+            }
+        }
+
         ghostty_config_finalize(primaryConfig)
 
-        // Extract background color from config
+        // Extract colors from config
         updateDefaultBackground(from: primaryConfig)
+        updateDefaultForeground(from: primaryConfig)
 
         // Create runtime config with callbacks
         var runtimeConfig = ghostty_runtime_config_s()
@@ -221,7 +232,7 @@ class DeckardGhosttyApp {
         return AppDelegate.shared?.windowController?.focusedSurface()
     }
 
-    // MARK: - Background Color
+    // MARK: - Theme Colors
 
     private func updateDefaultBackground(from config: ghostty_config_t) {
         var color = ghostty_config_color_s()
@@ -233,6 +244,51 @@ class DeckardGhosttyApp {
                 alpha: 1.0
             )
         }
+    }
+
+    private func updateDefaultForeground(from config: ghostty_config_t) {
+        var color = ghostty_config_color_s()
+        if ghostty_config_get(config, &color, "foreground", 10) {
+            defaultForegroundColor = NSColor(
+                red: CGFloat(color.r) / 255.0,
+                green: CGFloat(color.g) / 255.0,
+                blue: CGFloat(color.b) / 255.0,
+                alpha: 1.0
+            )
+        }
+    }
+
+    /// Reloads the Ghostty config with the current theme override applied.
+    func reloadConfigWithTheme() {
+        guard let app = self.app else { return }
+
+        guard let newConfig = ghostty_config_new() else { return }
+        ghostty_config_load_default_files(newConfig)
+        ghostty_config_load_recursive_files(newConfig)
+
+        let overridePath = ThemeManager.shared.overrideConfigPath
+        if FileManager.default.fileExists(atPath: overridePath) {
+            overridePath.withCString { ptr in
+                ghostty_config_load_file(newConfig, ptr)
+            }
+        }
+
+        ghostty_config_finalize(newConfig)
+
+        updateDefaultBackground(from: newConfig)
+        updateDefaultForeground(from: newConfig)
+
+        ghostty_app_update_config(app, newConfig)
+
+        // Update each existing surface so terminals pick up the new theme
+        if let wc = AppDelegate.shared?.windowController {
+            wc.forEachSurface { surface in
+                ghostty_surface_update_config(surface, newConfig)
+            }
+        }
+
+        if let old = self.config { ghostty_config_free(old) }
+        self.config = newConfig
     }
 
     // MARK: - Action Handling

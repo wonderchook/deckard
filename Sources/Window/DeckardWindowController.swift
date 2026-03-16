@@ -93,6 +93,9 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
     private var projects: [ProjectItem] = []
     private var selectedProjectIndex: Int = -1
 
+    // Theme
+    private(set) var currentThemeColors: ThemeColors = .default
+
     // UI
     private let splitView = CollapsibleSplitView()
     private let sidebarView = NSView()
@@ -128,7 +131,7 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         )
         window.title = "Deckard"
         window.minSize = NSSize(width: 600, height: 400)
-        window.backgroundColor = ghosttyApp.defaultBackgroundColor
+        window.backgroundColor = ThemeManager.shared.currentColors.background
         window.tabbingMode = .disallowed
 
         super.init(window: window)
@@ -138,13 +141,19 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
             window.center()
         }
 
+        // Apply theme colors BEFORE setupUI so all chrome uses the right colors
+        currentThemeColors = ThemeManager.shared.currentColors
+
         setupUI()
+
+        NotificationCenter.default.addObserver(self, selector: #selector(themeDidChange(_:)),
+                                               name: .deckardThemeChanged, object: nil)
 
         // Startup overlay — removed when the shell finishes initializing
         // (detected by the clear command completing, which triggers a title/pwd change)
         let startupOverlay = NSView()
         startupOverlay.wantsLayer = true
-        startupOverlay.layer?.backgroundColor = ghosttyApp.defaultBackgroundColor.cgColor
+        startupOverlay.layer?.backgroundColor = currentThemeColors.background.cgColor
         startupOverlay.layer?.zPosition = 9999
         startupOverlay.translatesAutoresizingMaskIntoConstraints = false
         terminalContainerView.addSubview(startupOverlay)
@@ -199,7 +208,7 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         // Sidebar
         sidebarView.translatesAutoresizingMaskIntoConstraints = false
         sidebarView.wantsLayer = true
-        sidebarView.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.95).cgColor
+        sidebarView.layer?.backgroundColor = currentThemeColors.sidebarBackground.cgColor
 
         // Drop zone covers the entire sidebar area below the stack
         sidebarDropZone.translatesAutoresizingMaskIntoConstraints = false
@@ -216,7 +225,7 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         let openButton = NSButton(image: NSImage(systemSymbolName: "folder.badge.plus", accessibilityDescription: "Open Folder")!, target: self, action: #selector(openProjectClicked))
         openButton.bezelStyle = .recessed
         openButton.isBordered = false
-        openButton.contentTintColor = .secondaryLabelColor
+        openButton.contentTintColor = currentThemeColors.secondaryText
         openButton.toolTip = shortcutTooltip("Open Folder", for: .openFolder)
         openButton.translatesAutoresizingMaskIntoConstraints = false
 
@@ -244,7 +253,7 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         tabBar.spacing = 0
         tabBar.translatesAutoresizingMaskIntoConstraints = false
         tabBar.wantsLayer = true
-        tabBar.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.8).cgColor
+        tabBar.layer?.backgroundColor = currentThemeColors.tabBarBackground.cgColor
         rightPane.addSubview(tabBar)
 
         terminalContainerView.translatesAutoresizingMaskIntoConstraints = false
@@ -290,7 +299,7 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         // Welcome message for empty state
         let welcome = NSTextField(labelWithString: "Press \u{2318}O to open a project")
         welcome.font = .systemFont(ofSize: 16, weight: .light)
-        welcome.textColor = .secondaryLabelColor
+        welcome.textColor = currentThemeColors.secondaryText
         welcome.alignment = .center
         welcome.translatesAutoresizingMaskIntoConstraints = false
         terminalContainerView.addSubview(welcome)
@@ -623,7 +632,7 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         if view.needsOverlay {
             let overlay = NSView()
             overlay.wantsLayer = true
-            overlay.layer?.backgroundColor = ghosttyApp.defaultBackgroundColor.cgColor
+            overlay.layer?.backgroundColor = currentThemeColors.background.cgColor
             overlay.translatesAutoresizingMaskIntoConstraints = false
             terminalContainerView.addSubview(overlay, positioned: .above, relativeTo: view)
             NSLayoutConstraint.activate([
@@ -712,6 +721,16 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         return project.tabs[idx].surfaceView.surface
     }
 
+    func forEachSurface(_ body: (ghostty_surface_t) -> Void) {
+        for project in projects {
+            for tab in project.tabs {
+                if let surface = tab.surfaceView.surface {
+                    body(surface)
+                }
+            }
+        }
+    }
+
     // MARK: - Surface Callbacks
 
     func dismissStartupOverlay() {
@@ -723,6 +742,21 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         }, completionHandler: {
             overlay.removeFromSuperview()
         })
+    }
+
+    // MARK: - Theme
+
+    @objc private func themeDidChange(_ notification: Notification) {
+        applyThemeColors(ThemeManager.shared.currentColors)
+    }
+
+    private func applyThemeColors(_ colors: ThemeColors) {
+        currentThemeColors = colors
+        window?.backgroundColor = colors.background
+        sidebarView.layer?.backgroundColor = colors.sidebarBackground.cgColor
+        tabBar.layer?.backgroundColor = colors.tabBarBackground.cgColor
+        rebuildSidebar()
+        rebuildTabBar()
     }
 
     private func revealSurface(_ view: TerminalNSView) {
@@ -1305,7 +1339,7 @@ class VerticalTabRowView: NSView, NSTextFieldDelegate, NSDraggingSource {
 
         label = NSTextField(labelWithString: title)
         label.font = bold ? .boldSystemFont(ofSize: 12) : .systemFont(ofSize: 12)
-        label.textColor = .labelColor
+        label.textColor = ThemeManager.shared.currentColors.primaryText
         label.lineBreakMode = .byTruncatingTail
         label.maximumNumberOfLines = 1
 
@@ -1338,7 +1372,7 @@ class VerticalTabRowView: NSView, NSTextFieldDelegate, NSDraggingSource {
 
     override func draw(_ dirtyRect: NSRect) {
         if isSelected {
-            NSColor.selectedContentBackgroundColor.withAlphaComponent(0.3).setFill()
+            ThemeManager.shared.currentColors.selectedBackground.setFill()
             bounds.fill()
         }
     }
@@ -1525,7 +1559,8 @@ class HorizontalTabView: NSView, NSTextFieldDelegate, NSDraggingSource {
 
         label = NSTextField(labelWithString: displayTitle)
         label.font = .systemFont(ofSize: 12)
-        label.textColor = isSelected ? .labelColor : .secondaryLabelColor
+        let tc = ThemeManager.shared.currentColors
+        label.textColor = isSelected ? tc.primaryText : tc.secondaryText
         label.lineBreakMode = .byTruncatingTail
         label.setContentHuggingPriority(.defaultHigh, for: .horizontal)
         label.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
@@ -1575,7 +1610,7 @@ class HorizontalTabView: NSView, NSTextFieldDelegate, NSDraggingSource {
         NSLayoutConstraint.activate(constraints)
 
         if isSelected {
-            layer?.backgroundColor = NSColor.selectedContentBackgroundColor.withAlphaComponent(0.2).cgColor
+            layer?.backgroundColor = ThemeManager.shared.currentColors.selectedBackground.cgColor
         }
 
     }
@@ -1697,7 +1732,7 @@ class AddTabButton: NSView {
         self.rightClickAction = rightClickAction
         label = NSTextField(labelWithString: "  +")
         label.font = .systemFont(ofSize: 12, weight: .medium)
-        label.textColor = .secondaryLabelColor
+        label.textColor = ThemeManager.shared.currentColors.secondaryText
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         toolTip = shortcutTooltip("New Claude tab", for: .newClaudeTab)
@@ -1733,7 +1768,7 @@ class ReorderableStackView: NSStackView {
     private let dropIndicator: NSView = {
         let v = NSView()
         v.wantsLayer = true
-        v.layer?.backgroundColor = NSColor.selectedContentBackgroundColor.withAlphaComponent(0.6).cgColor
+        v.layer?.backgroundColor = ThemeManager.shared.currentColors.foreground.withAlphaComponent(0.4).cgColor
         v.isHidden = true
         return v
     }()
@@ -1824,7 +1859,7 @@ class ReorderableHStackView: NSStackView {
     private let dropIndicator: NSView = {
         let v = NSView()
         v.wantsLayer = true
-        v.layer?.backgroundColor = NSColor.selectedContentBackgroundColor.withAlphaComponent(0.6).cgColor
+        v.layer?.backgroundColor = ThemeManager.shared.currentColors.foreground.withAlphaComponent(0.4).cgColor
         v.isHidden = true
         return v
     }()

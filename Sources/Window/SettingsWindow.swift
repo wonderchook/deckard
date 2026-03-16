@@ -6,12 +6,14 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
     private enum Pane: String, CaseIterable {
         case general = "General"
+        case appearance = "Appearance"
         case shortcuts = "Shortcuts"
         case about = "About"
 
         var icon: NSImage {
             switch self {
             case .general: return NSImage(systemSymbolName: "gearshape", accessibilityDescription: "General")!
+            case .appearance: return NSImage(systemSymbolName: "paintpalette", accessibilityDescription: "Appearance")!
             case .shortcuts: return NSImage(systemSymbolName: "keyboard", accessibilityDescription: "Shortcuts")!
             case .about: return NSImage(systemSymbolName: "info.circle", accessibilityDescription: "About")!
             }
@@ -83,6 +85,7 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         let newView: NSView
         switch pane {
         case .general: newView = makeGeneralPane()
+        case .appearance: newView = makeAppearancePane()
         case .shortcuts: newView = makeShortcutsPane()
         case .about: newView = makeAboutPane()
         }
@@ -170,6 +173,109 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         ])
 
         return pane
+    }
+
+    // MARK: - Appearance Pane
+
+    private var themeTableView: NSTableView?
+    private var themeSearchField: NSSearchField?
+    private var filteredThemes: [ThemeManager.ThemeInfo] = []
+    private var allThemeEntries: [(name: String, info: ThemeManager.ThemeInfo?)] = []  // nil info = System Default
+
+    private func makeAppearancePane() -> NSView {
+        let pane = NSView()
+
+        let label = NSTextField(labelWithString: "Theme:")
+        label.font = .systemFont(ofSize: 13, weight: .medium)
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        let searchField = NSSearchField()
+        searchField.placeholderString = "Search themes..."
+        searchField.translatesAutoresizingMaskIntoConstraints = false
+        searchField.target = self
+        searchField.action = #selector(themeSearchChanged(_:))
+        self.themeSearchField = searchField
+
+        let tableView = NSTableView()
+        tableView.headerView = nil
+        tableView.rowHeight = 24
+        tableView.style = .plain
+        tableView.usesAlternatingRowBackgroundColors = false
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("theme"))
+        column.title = "Theme"
+        tableView.addTableColumn(column)
+        tableView.delegate = self
+        tableView.dataSource = self
+        tableView.target = self
+        tableView.action = #selector(themeRowClicked)
+        self.themeTableView = tableView
+
+        let scrollView = NSScrollView()
+        scrollView.documentView = tableView
+        scrollView.hasVerticalScroller = true
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.borderType = .bezelBorder
+
+        pane.addSubview(label)
+        pane.addSubview(searchField)
+        pane.addSubview(scrollView)
+
+        NSLayoutConstraint.activate([
+            label.topAnchor.constraint(equalTo: pane.topAnchor, constant: 16),
+            label.leadingAnchor.constraint(equalTo: pane.leadingAnchor, constant: 20),
+
+            searchField.topAnchor.constraint(equalTo: pane.topAnchor, constant: 16),
+            searchField.leadingAnchor.constraint(equalTo: label.trailingAnchor, constant: 8),
+            searchField.trailingAnchor.constraint(equalTo: pane.trailingAnchor, constant: -20),
+            searchField.widthAnchor.constraint(greaterThanOrEqualToConstant: 200),
+
+            scrollView.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 10),
+            scrollView.leadingAnchor.constraint(equalTo: pane.leadingAnchor, constant: 20),
+            scrollView.trailingAnchor.constraint(equalTo: pane.trailingAnchor, constant: -20),
+            scrollView.bottomAnchor.constraint(equalTo: pane.bottomAnchor, constant: -16),
+            scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 300),
+        ])
+
+        // Populate theme list
+        rebuildThemeList(filter: "")
+
+        // Select current theme
+        if let current = ThemeManager.shared.currentThemeName {
+            if let idx = allThemeEntries.firstIndex(where: { $0.name == current }) {
+                tableView.selectRowIndexes(IndexSet(integer: idx), byExtendingSelection: false)
+                tableView.scrollRowToVisible(idx)
+            }
+        } else {
+            tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+        }
+
+        return pane
+    }
+
+    private func rebuildThemeList(filter: String) {
+        var entries: [(name: String, info: ThemeManager.ThemeInfo?)] = []
+        entries.append((name: "System Default", info: nil))
+
+        for theme in ThemeManager.shared.availableThemes {
+            if filter.isEmpty || theme.name.localizedCaseInsensitiveContains(filter) {
+                entries.append((name: theme.name, info: theme))
+            }
+        }
+        allThemeEntries = entries
+        themeTableView?.reloadData()
+    }
+
+    @objc private func themeSearchChanged(_ sender: NSSearchField) {
+        rebuildThemeList(filter: sender.stringValue)
+    }
+
+    @objc private func themeRowClicked() {
+        guard let tableView = themeTableView else { return }
+        let row = tableView.selectedRow
+        guard row >= 0, row < allThemeEntries.count else { return }
+
+        let entry = allThemeEntries[row]
+        ThemeManager.shared.applyTheme(name: entry.info?.name)
     }
 
     // MARK: - Shortcuts Pane
@@ -287,6 +393,29 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate {
     func show() {
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
+// MARK: - Theme Table DataSource/Delegate
+
+extension SettingsWindowController: NSTableViewDataSource, NSTableViewDelegate {
+    func numberOfRows(in tableView: NSTableView) -> Int {
+        allThemeEntries.count
+    }
+
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        let id = NSUserInterfaceItemIdentifier("ThemeCell")
+        let cell = tableView.makeView(withIdentifier: id, owner: nil) as? NSTextField
+            ?? {
+                let tf = NSTextField(labelWithString: "")
+                tf.identifier = id
+                tf.lineBreakMode = .byTruncatingTail
+                return tf
+            }()
+        let entry = allThemeEntries[row]
+        cell.stringValue = entry.name
+        cell.font = entry.info == nil ? .systemFont(ofSize: 13, weight: .medium) : .systemFont(ofSize: 13)
+        return cell
     }
 }
 
