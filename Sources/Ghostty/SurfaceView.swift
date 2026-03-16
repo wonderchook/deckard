@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import GhosttyKit
 
 /// Callback context stored as the surface's userdata.
@@ -43,7 +44,8 @@ class TerminalNSView: NSView {
         // Listen for key-up events that may not reach us through the normal responder chain
         // (e.g., Cmd+key combos where keyUp goes to the window).
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyUp]) { [weak self] event in
-            self?.keyUp(with: event)
+            guard let self = self, self === self.window?.firstResponder else { return event }
+            self.keyUp(with: event)
             return event
         }
     }
@@ -246,6 +248,28 @@ class TerminalNSView: NSView {
         _ = ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_RIGHT, mods)
     }
 
+    override func otherMouseDown(with event: NSEvent) {
+        guard event.buttonNumber == 2 else { super.otherMouseDown(with: event); return }
+        guard let surface = self.surface else { return }
+        let mods = Self.ghosttyMods(from: event)
+        _ = ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_MIDDLE, mods)
+    }
+
+    override func otherMouseUp(with event: NSEvent) {
+        guard event.buttonNumber == 2 else { super.otherMouseUp(with: event); return }
+        guard let surface = self.surface else { return }
+        let mods = Self.ghosttyMods(from: event)
+        _ = ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_MIDDLE, mods)
+    }
+
+    override func otherMouseDragged(with event: NSEvent) {
+        guard event.buttonNumber == 2 else { super.otherMouseDragged(with: event); return }
+        guard let surface = self.surface else { return }
+        let pos = convert(event.locationInWindow, from: nil)
+        let mods = Self.ghosttyMods(from: event)
+        ghostty_surface_mouse_pos(surface, pos.x, bounds.height - pos.y, mods)
+    }
+
     override func mouseMoved(with event: NSEvent) {
         guard let surface = self.surface else { return }
         let pos = convert(event.locationInWindow, from: nil)
@@ -260,45 +284,126 @@ class TerminalNSView: NSView {
         ghostty_surface_mouse_pos(surface, pos.x, bounds.height - pos.y, mods)
     }
 
+    override func rightMouseDragged(with event: NSEvent) {
+        guard let surface = self.surface else { return }
+        let pos = convert(event.locationInWindow, from: nil)
+        let mods = Self.ghosttyMods(from: event)
+        ghostty_surface_mouse_pos(surface, pos.x, bounds.height - pos.y, mods)
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        guard let surface = self.surface else { return }
+        let pos = convert(event.locationInWindow, from: nil)
+        let mods = Self.ghosttyMods(from: event)
+        ghostty_surface_mouse_pos(surface, pos.x, bounds.height - pos.y, mods)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        guard let surface = self.surface else { return }
+        // If a button is held (drag in progress), don't reset — we still
+        // get drag events outside the viewport.
+        if NSEvent.pressedMouseButtons != 0 { return }
+        let mods = Self.ghosttyMods(from: event)
+        ghostty_surface_mouse_pos(surface, -1, -1, mods)
+    }
+
     override func scrollWheel(with event: NSEvent) {
         guard let surface = self.surface else { return }
+        var x = event.scrollingDeltaX
+        var y = event.scrollingDeltaY
+        let precision = event.hasPreciseScrollingDeltas
+        if precision {
+            x *= 2
+            y *= 2
+        }
         var mods: ghostty_input_scroll_mods_t = 0
-        if event.hasPreciseScrollingDeltas {
+        if precision {
             mods |= 1 // precision bit
         }
-        ghostty_surface_mouse_scroll(surface, event.scrollingDeltaX, event.scrollingDeltaY, mods)
+        ghostty_surface_mouse_scroll(surface, x, y, mods)
     }
 
     // MARK: - Keyboard Events
 
     /// Build a ghostty key input struct from an NSEvent.
-    private func ghosttyKeyInput(for event: NSEvent) -> ghostty_input_key_s {
+    /// The `mods` field is always set to the ORIGINAL event modifiers (per API contract).
+    /// Translation mods are used only for consumed_mods and NSEvent reconstruction.
+    private func ghosttyKeyInput(for event: NSEvent, translationMods: NSEvent.ModifierFlags? = nil) -> ghostty_input_key_s {
         var input = ghostty_input_key_s()
         input.action = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
         input.keycode = UInt32(event.keyCode)
         input.composing = false
 
-        // Use translation mods if available (respects macos-option-as-alt config)
-        let rawMods = Self.ghosttyMods(from: event)
-        if let surface = self.surface {
-            input.mods = ghostty_surface_key_translation_mods(surface, rawMods)
-        } else {
-            input.mods = rawMods
-        }
+        // Always send original mods — the API contract requires this.
+        input.mods = Self.ghosttyMods(from: event)
 
-        // Unshifted codepoint = the key without modifiers applied
-        if let unshifted = event.charactersIgnoringModifiers?.unicodeScalars.first,
-           unshifted.value < 0xF700 { // exclude private-use function key chars
-            input.unshifted_codepoint = unshifted.value
+        // consumed_mods: control and command never contribute to text translation.
+        let consumedFlags = (translationMods ?? event.modifierFlags)
+            .subtracting([.control, .command])
+        input.consumed_mods = Self.ghosttyMods(fromCocoa: consumedFlags)
+
+        // Unshifted codepoint = the key without any modifiers applied.
+        // Use characters(byApplyingModifiers:[]) for accuracy (charactersIgnoringModifiers
+        // changes behavior with ctrl pressed).
+        if event.type == .keyDown || event.type == .keyUp {
+            if let chars = event.characters(byApplyingModifiers: []),
+               let codepoint = chars.unicodeScalars.first,
+               codepoint.value < 0xF700 {
+                input.unshifted_codepoint = codepoint.value
+            }
         }
 
         return input
     }
 
+    /// Compute translation modifiers and optionally reconstruct the NSEvent.
+    /// Returns (translationEvent, translationMods) — the event to pass to
+    /// interpretKeyEvents and the modifier flags used for its reconstruction.
+    private func translationEvent(for event: NSEvent) -> (NSEvent, NSEvent.ModifierFlags) {
+        guard let surface = self.surface else { return (event, event.modifierFlags) }
+
+        let rawMods = Self.ghosttyMods(from: event)
+        let translatedGhostty = ghostty_surface_key_translation_mods(surface, rawMods)
+
+        // Convert back to NSEvent.ModifierFlags, preserving hidden bits
+        // (important for dead key handling).
+        let translatedNS = Self.cocoaMods(from: translatedGhostty)
+        var translationMods = event.modifierFlags
+        for flag in [NSEvent.ModifierFlags.shift, .control, .option, .command] {
+            if translatedNS.contains(flag) {
+                translationMods.insert(flag)
+            } else {
+                translationMods.remove(flag)
+            }
+        }
+
+        // Reuse the original event when mods match — required for Korean IME
+        // (AppKit relies on object identity internally).
+        if translationMods == event.modifierFlags {
+            return (event, event.modifierFlags)
+        }
+
+        let reconstructed = NSEvent.keyEvent(
+            with: event.type,
+            location: event.locationInWindow,
+            modifierFlags: translationMods,
+            timestamp: event.timestamp,
+            windowNumber: event.windowNumber,
+            context: nil,
+            characters: event.characters(byApplyingModifiers: translationMods) ?? "",
+            charactersIgnoringModifiers: event.charactersIgnoringModifiers ?? "",
+            isARepeat: event.isARepeat,
+            keyCode: event.keyCode
+        ) ?? event
+
+        return (reconstructed, translationMods)
+    }
+
     override func keyDown(with event: NSEvent) {
         guard let surface = self.surface else { return }
 
-        var input = ghosttyKeyInput(for: event)
+        let (translationEvt, translationMods) = translationEvent(for: event)
+        var input = ghosttyKeyInput(for: event, translationMods: translationMods)
 
         // Check if ghostty handles this as a keybinding
         var flags: ghostty_binding_flags_e = ghostty_binding_flags_e(rawValue: 0)
@@ -310,18 +415,32 @@ class TerminalNSView: NSView {
 
         // Fast path for Ctrl+key — bypass interpretKeyEvents for deterministic
         // terminal control characters (Ctrl+C, Ctrl+D, etc.)
-        let nsFlags = event.modifierFlags
-        if nsFlags.contains(.control) && !nsFlags.contains(.command) {
+        if event.modifierFlags.contains(.control) && !event.modifierFlags.contains(.command) {
             _ = ghostty_surface_key(surface, input)
             return
         }
 
         let markedTextBefore = markedText.length > 0
 
-        // Use macOS text input system for proper text handling
-        // (Shift+letters, dead keys, Option+key combos, IME, etc.)
+        // Capture keyboard layout ID before interpretKeyEvents to detect
+        // IME input source switches (e.g. Shift+Space toggling CJK input).
+        let keyboardIdBefore: String? = if !markedTextBefore {
+            Self.currentKeyboardLayoutId()
+        } else {
+            nil
+        }
+
+        // Use macOS text input system for proper text handling.
+        // Pass the translation event so characters reflect option-as-alt config.
         keyTextAccumulator = []
-        interpretKeyEvents([event])
+        interpretKeyEvents([translationEvt])
+
+        // If the keyboard layout changed, an IME consumed the event for its
+        // own switching — don't send anything to the terminal.
+        if !markedTextBefore && keyboardIdBefore != Self.currentKeyboardLayoutId() {
+            keyTextAccumulator = nil
+            return
+        }
 
         // Sync preedit state (dead key accent overlay) with ghostty
         syncPreedit(clearIfNeeded: markedTextBefore)
@@ -330,9 +449,6 @@ class TerminalNSView: NSView {
             let text = texts.joined()
             text.withCString { ptr in
                 input.text = ptr
-                // Mark shift/option as consumed since they affected the text
-                let consumed = nsFlags.intersection([.shift, .option])
-                input.consumed_mods = Self.ghosttyMods(fromCocoa: consumed)
                 _ = ghostty_surface_key(surface, input)
             }
         } else {
@@ -348,6 +464,7 @@ class TerminalNSView: NSView {
         var input = ghosttyKeyInput(for: event)
         input.action = GHOSTTY_ACTION_RELEASE
         input.text = nil
+        input.composing = false
         _ = ghostty_surface_key(surface, input)
     }
 
@@ -364,6 +481,14 @@ class TerminalNSView: NSView {
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard let surface = self.surface else { return false }
+
+        // If the IME is composing and the key has no Cmd modifier, don't
+        // intercept — let it flow through to keyDown so the input method
+        // can process it normally.
+        if hasMarkedText(),
+           !event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command) {
+            return false
+        }
 
         // Let Cmd+key shortcuts reach the menu system (Cmd+Q, Cmd+T, Cmd+W, etc.)
         // Only intercept if ghostty has an explicit keybinding AND it's not a standard menu shortcut.
@@ -485,6 +610,25 @@ class TerminalNSView: NSView {
         if flags.contains(.command) { mods = ghostty_input_mods_e(rawValue: mods.rawValue | GHOSTTY_MODS_SUPER.rawValue) }
         if flags.contains(.capsLock) { mods = ghostty_input_mods_e(rawValue: mods.rawValue | GHOSTTY_MODS_CAPS.rawValue) }
         return mods
+    }
+
+    /// Convert Ghostty modifier flags back to NSEvent.ModifierFlags.
+    static func cocoaMods(from mods: ghostty_input_mods_e) -> NSEvent.ModifierFlags {
+        var flags = NSEvent.ModifierFlags(rawValue: 0)
+        if mods.rawValue & GHOSTTY_MODS_SHIFT.rawValue != 0 { flags.insert(.shift) }
+        if mods.rawValue & GHOSTTY_MODS_CTRL.rawValue != 0 { flags.insert(.control) }
+        if mods.rawValue & GHOSTTY_MODS_ALT.rawValue != 0 { flags.insert(.option) }
+        if mods.rawValue & GHOSTTY_MODS_SUPER.rawValue != 0 { flags.insert(.command) }
+        return flags
+    }
+
+    /// Return the current keyboard input source ID (for detecting IME switches).
+    static func currentKeyboardLayoutId() -> String? {
+        guard let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
+              let ptr = TISGetInputSourceProperty(source, kTISPropertyInputSourceID) else {
+            return nil
+        }
+        return unsafeBitCast(ptr, to: CFString.self) as String
     }
 
     /// Convert NSEvent keyCode to Ghostty key enum.
