@@ -75,6 +75,7 @@ class ContextMonitor {
             if let msg = json["message"] as? [String: Any], let usage = msg["usage"] as? [String: Any] {
                 lastInput = usage["input_tokens"] as? Int ?? 0
                 lastCacheRead = usage["cache_read_input_tokens"] as? Int ?? 0
+                if lastInput + lastCacheRead == 0 { continue }
                 model = msg["model"] as? String ?? model
                 break
             }
@@ -84,6 +85,7 @@ class ContextMonitor {
                let usage = inner["usage"] as? [String: Any] {
                 lastInput = usage["input_tokens"] as? Int ?? 0
                 lastCacheRead = usage["cache_read_input_tokens"] as? Int ?? 0
+                if lastInput + lastCacheRead == 0 { continue }
                 model = inner["model"] as? String ?? model
                 break
             }
