@@ -1,0 +1,13 @@
+included:
+  - Sources
+
+excluded:
+  - ghostty
+
+disabled_rules:
+  - trailing_whitespace
+  - line_length
+  - type_body_length
+  - file_length
+  - function_body_length
+  - cyclomatic_complexity

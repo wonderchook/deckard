@@ -4,6 +4,8 @@ A native macOS terminal manager for [Claude Code](https://docs.anthropic.com/en/
 
 Built with Swift and AppKit. Terminal rendering powered by [Ghostty](https://ghostty.org/).
 
+**[Download the latest release](https://github.com/gi11es/deckard/releases/latest)** (macOS 14+, Apple Silicon)
+
 ![Deckard screenshot](screenshot.png)
 
 ## Features
@@ -23,11 +25,12 @@ Built with Swift and AppKit. Terminal rendering powered by [Ghostty](https://gho
 
 ## Building
 
-Deckard uses [Ghostty](https://ghostty.org/) as a git submodule. Clone with submodules, then build:
+Deckard uses [Ghostty](https://ghostty.org/) as a git submodule. Clone with submodules, run the setup script (builds GhosttyKit and installs git hooks), then build:
 
 ```bash
 git clone --recurse-submodules https://github.com/gi11es/deckard.git
 cd deckard
+./scripts/setup.sh
 xcodebuild -project Deckard.xcodeproj -scheme Deckard -configuration Debug build
 ```
 

@@ -44,6 +44,10 @@ else
     echo "==> GhosttyKit.xcframework already exists, skipping build"
 fi
 
+# Install git hooks
+echo "==> Installing git hooks"
+ln -sf ../../scripts/pre-commit "$PROJECT_DIR/.git/hooks/pre-commit"
+
 echo "==> Setup complete!"
 echo ""
 echo "The xcframework is at: $XCFRAMEWORK"
