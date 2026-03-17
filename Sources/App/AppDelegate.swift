@@ -233,10 +233,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func closeCurrentTab() {
+        // If a secondary window (e.g. Settings) is key, close it instead of
+        // closing a terminal tab in the main window.
+        if let keyWindow = NSApp.keyWindow,
+           keyWindow != windowController?.window {
+            keyWindow.performClose(nil)
+            return
+        }
         windowController?.closeCurrentTab()
     }
 
     @objc private func closeCurrentProject() {
+        if let keyWindow = NSApp.keyWindow,
+           keyWindow != windowController?.window {
+            keyWindow.performClose(nil)
+            return
+        }
         windowController?.closeCurrentProject()
     }
 
