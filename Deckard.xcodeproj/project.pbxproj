@@ -10,6 +10,7 @@
 		0D4C913A8846099ED84D5816 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F505D5B7348F40C2CBD6F83 /* AppDelegate.swift */; };
 
 		AABB0001AABB0001AABB0001 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = AABB0002AABB0002AABB0002 /* KeyboardShortcuts */; };
+		FF110001FF110001FF110001 /* Fuse in Frameworks */ = {isa = PBXBuildFile; productRef = FF110002FF110002FF110002 /* Fuse */; };
 		2D322E22D0679FD39D688539 /* SessionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BE2AA0719D32ACCD1549184 /* SessionState.swift */; };
 		2E4FF6C3438B5F0E73C4FA87 /* ContextMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5FD7F070DDB4216278EFDE6 /* ContextMonitor.swift */; };
 		37FA9D946FD6ECA1DDF5898A /* DeckardWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8391EFB62A21AFA1DA62733F /* DeckardWindowController.swift */; };
@@ -60,6 +61,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AABB0001AABB0001AABB0001 /* KeyboardShortcuts in Frameworks */,
+				FF110001FF110001FF110001 /* Fuse in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -174,6 +176,7 @@
 			name = Deckard;
 			packageProductDependencies = (
 				AABB0002AABB0002AABB0002 /* KeyboardShortcuts */,
+				FF110002FF110002FF110002 /* Fuse */,
 			);
 			productName = Deckard;
 			productReference = A32278396B92132B3CE7A5A4 /* Deckard.app */;
@@ -200,6 +203,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				AABB0003AABB0003AABB0003 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
+				FF110003FF110003FF110003 /* XCRemoteSwiftPackageReference "fuse-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
@@ -522,6 +526,14 @@
 				minimumVersion = 2.0.0;
 			};
 		};
+		FF110003FF110003FF110003 /* XCRemoteSwiftPackageReference "fuse-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/krisk/fuse-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -530,6 +542,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = AABB0003AABB0003AABB0003 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */;
 			productName = KeyboardShortcuts;
+		};
+		FF110002FF110002FF110002 /* Fuse */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FF110003FF110003FF110003 /* XCRemoteSwiftPackageReference "fuse-swift" */;
+			productName = Fuse;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
