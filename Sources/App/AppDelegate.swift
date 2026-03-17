@@ -13,14 +13,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.shared = self
 
-        // Set the GHOSTTY_RESOURCES_DIR BEFORE creating the Ghostty app, so theme
-        // resolution works during initial config loading.
+        // Set GHOSTTY_RESOURCES_DIR BEFORE creating the Ghostty app so shell
+        // integration, terminfo, and theme resolution work during config loading.
+        // Layout: GHOSTTY_RESOURCES_DIR points to a dir with themes/ and shell-integration/,
+        // with terminfo/ as a sibling (at ../terminfo).
         let devResources = Bundle.main.bundlePath + "/../ghostty/zig-out/share/ghostty"
-        let bundleResources = Bundle.main.resourcePath ?? ""
-        if FileManager.default.fileExists(atPath: devResources) {
+        let devTerminfo = Bundle.main.bundlePath + "/../ghostty/zig-out/share/terminfo"
+        let bundleGhostty = (Bundle.main.resourcePath ?? "") + "/ghostty"
+        let bundleTerminfo = (Bundle.main.resourcePath ?? "") + "/terminfo"
+        if FileManager.default.fileExists(atPath: devResources + "/shell-integration") {
             setenv("GHOSTTY_RESOURCES_DIR", devResources, 1)
-        } else if FileManager.default.fileExists(atPath: bundleResources + "/themes") {
-            setenv("GHOSTTY_RESOURCES_DIR", bundleResources, 1)
+            setenv("TERMINFO_DIRS", devTerminfo, 1)
+        } else if FileManager.default.fileExists(atPath: bundleGhostty + "/themes") {
+            setenv("GHOSTTY_RESOURCES_DIR", bundleGhostty, 1)
+            setenv("TERMINFO_DIRS", bundleTerminfo, 1)
         }
 
         // Set up the Ghostty app wrapper (creates ghostty_app_t with callbacks).

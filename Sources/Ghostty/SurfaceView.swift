@@ -421,24 +421,6 @@ class TerminalNSView: NSView {
             return (event, event.modifierFlags)
         }
 
-        // Don't reconstruct events for non-printable keys (backspace, delete,
-        // arrows, function keys, etc.). characters(byApplyingModifiers:) returns
-        // wrong characters for these keys (e.g. space for backspace).
-        let kc = Int(event.keyCode)
-        let nonPrintable: Set<Int> = [
-            51,  // backspace
-            117, // forward delete
-            36,  // return
-            76,  // numpad enter
-            48,  // tab
-            53,  // escape
-            123, 124, 125, 126, // arrow keys
-            115, 116, 119, 121, // home, page up, end, page down
-        ]
-        if nonPrintable.contains(kc) {
-            return (event, translationMods)
-        }
-
         let reconstructed = NSEvent.keyEvent(
             with: event.type,
             location: event.locationInWindow,
@@ -458,77 +440,145 @@ class TerminalNSView: NSView {
     override func keyDown(with event: NSEvent) {
         guard let surface = self.surface else { return }
 
-        let (translationEvt, translationMods) = translationEvent(for: event)
-        var input = ghosttyKeyInput(for: event, translationMods: translationMods)
-
-        // Check if ghostty handles this as a keybinding
-        var flags: ghostty_binding_flags_e = ghostty_binding_flags_e(rawValue: 0)
-        if ghostty_surface_key_is_binding(surface, input, &flags) {
-            if hasMarkedText() { return }
-            _ = ghostty_surface_key(surface, input)
-            return
-        }
+        let action = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
 
         // Fast path for Ctrl+key — bypass interpretKeyEvents for deterministic
         // terminal control characters (Ctrl+C, Ctrl+D, etc.)
-        if event.modifierFlags.contains(.control) && !event.modifierFlags.contains(.command) {
-            _ = ghostty_surface_key(surface, input)
+        let eventFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if eventFlags.contains(.control) && !eventFlags.contains(.command)
+            && !eventFlags.contains(.option) && !hasMarkedText() {
+            var keyEvent = ghostty_input_key_s()
+            keyEvent.action = action
+            keyEvent.keycode = UInt32(event.keyCode)
+            keyEvent.mods = Self.ghosttyMods(from: event)
+            keyEvent.consumed_mods = GHOSTTY_MODS_NONE
+            keyEvent.composing = false
+            keyEvent.unshifted_codepoint = Self.unshiftedCodepoint(for: event)
+
+            let text = event.charactersIgnoringModifiers ?? event.characters ?? ""
+            if text.isEmpty {
+                keyEvent.text = nil
+                _ = ghostty_surface_key(surface, keyEvent)
+            } else {
+                text.withCString { ptr in
+                    keyEvent.text = ptr
+                    _ = ghostty_surface_key(surface, keyEvent)
+                }
+            }
             return
         }
 
-        // Fast path for non-printable keys (backspace, delete, arrows, etc.) —
-        // interpretKeyEvents can produce spurious text for these (e.g. space for
-        // backspace). Send them directly to ghostty as raw key events.
-        // Exception: allow through if IME is composing so backspace can edit preedit.
-        if !hasMarkedText() {
-            let kc = event.keyCode
-            if kc == 51 || kc == 117 || // backspace, forward delete
-               kc == 36 || kc == 76 ||  // return, numpad enter
-               kc == 48 || kc == 53 ||  // tab, escape
-               (kc >= 123 && kc <= 126) || // arrow keys
-               kc == 115 || kc == 116 || kc == 119 || kc == 121 { // home, pgup, end, pgdn
-                _ = ghostty_surface_key(surface, input)
-                return
-            }
-        }
+        // Normal path: mod translation + interpretKeyEvents
+        let (translationEvt, translationMods) = translationEvent(for: event)
+
+        keyTextAccumulator = []
+        defer { keyTextAccumulator = nil }
 
         let markedTextBefore = markedText.length > 0
 
-        // Capture keyboard layout ID before interpretKeyEvents to detect
-        // IME input source switches (e.g. Shift+Space toggling CJK input).
+        // Capture keyboard layout ID to detect IME switches
         let keyboardIdBefore: String? = if !markedTextBefore {
             Self.currentKeyboardLayoutId()
         } else {
             nil
         }
 
-        // Use macOS text input system for proper text handling.
-        // Pass the translation event so characters reflect option-as-alt config.
-        keyTextAccumulator = []
         interpretKeyEvents([translationEvt])
 
-        // If the keyboard layout changed, an IME consumed the event for its
-        // own switching — don't send anything to the terminal.
+        // If the keyboard layout changed, an IME consumed the event
         if !markedTextBefore && keyboardIdBefore != Self.currentKeyboardLayoutId() {
-            keyTextAccumulator = nil
+            syncPreedit(clearIfNeeded: markedTextBefore)
             return
         }
 
-        // Sync preedit state (dead key accent overlay) with ghostty
         syncPreedit(clearIfNeeded: markedTextBefore)
 
-        if let texts = keyTextAccumulator, !texts.isEmpty {
-            let text = texts.joined()
-            text.withCString { ptr in
-                input.text = ptr
-                _ = ghostty_surface_key(surface, input)
+        // Build the key event
+        var keyEvent = ghostty_input_key_s()
+        keyEvent.action = action
+        keyEvent.keycode = UInt32(event.keyCode)
+        keyEvent.mods = Self.ghosttyMods(from: event)
+        keyEvent.consumed_mods = Self.consumedMods(from: translationMods)
+        keyEvent.unshifted_codepoint = Self.unshiftedCodepoint(for: event)
+        keyEvent.composing = markedText.length > 0 || markedTextBefore
+
+        let accumulatedText = keyTextAccumulator ?? []
+        if !accumulatedText.isEmpty {
+            // Text from interpretKeyEvents (IME composition result)
+            keyEvent.composing = false
+            for text in accumulatedText {
+                if Self.shouldSendText(text) {
+                    text.withCString { ptr in
+                        keyEvent.text = ptr
+                        _ = ghostty_surface_key(surface, keyEvent)
+                    }
+                } else {
+                    keyEvent.text = nil
+                    _ = ghostty_surface_key(surface, keyEvent)
+                }
             }
         } else {
-            // No text produced — composing or raw key event
-            input.composing = markedText.length > 0 || markedTextBefore
-            _ = ghostty_surface_key(surface, input)
+            // No accumulated text — compute from the event
+            if let text = Self.textForKeyEvent(translationEvt),
+               Self.shouldSendText(text), !keyEvent.composing {
+                text.withCString { ptr in
+                    keyEvent.text = ptr
+                    _ = ghostty_surface_key(surface, keyEvent)
+                }
+            } else {
+                keyEvent.text = nil
+                _ = ghostty_surface_key(surface, keyEvent)
+            }
         }
-        keyTextAccumulator = nil
+    }
+
+    /// Only send text if the first byte is printable (>= 0x20).
+    private static func shouldSendText(_ text: String) -> Bool {
+        guard let first = text.utf8.first else { return false }
+        return first >= 0x20
+    }
+
+    /// Consumed mods: only Shift and Option (never Ctrl/Cmd).
+    private static func consumedMods(from flags: NSEvent.ModifierFlags) -> ghostty_input_mods_e {
+        var mods = GHOSTTY_MODS_NONE.rawValue
+        if flags.contains(.shift) { mods |= GHOSTTY_MODS_SHIFT.rawValue }
+        if flags.contains(.option) { mods |= GHOSTTY_MODS_ALT.rawValue }
+        return ghostty_input_mods_e(rawValue: mods)
+    }
+
+    /// Get the unshifted codepoint for a key event.
+    private static func unshiftedCodepoint(for event: NSEvent) -> UInt32 {
+        guard event.type == .keyDown || event.type == .keyUp else { return 0 }
+        guard let chars = event.characters(byApplyingModifiers: []),
+              let scalar = chars.unicodeScalars.first else { return 0 }
+        return scalar.value
+    }
+
+    /// Extract the text payload for a key event.
+    /// For control characters with Ctrl held, returns the base character so
+    /// Ghostty's KeyEncoder can apply its own control-character encoding.
+    /// Filters out Private Use Area characters (function keys).
+    private static func textForKeyEvent(_ event: NSEvent) -> String? {
+        guard let chars = event.characters, !chars.isEmpty else { return nil }
+
+        if chars.count == 1, let scalar = chars.unicodeScalars.first {
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+            if scalar.value < 0x20 {
+                if flags.contains(.control) {
+                    return event.characters(byApplyingModifiers: event.modifierFlags.subtracting(.control))
+                }
+                // Shift+` can report as bare ESC — return "~" instead
+                if scalar.value == 0x1B, flags == [.shift],
+                   event.charactersIgnoringModifiers == "`" {
+                    return "~"
+                }
+            }
+            if scalar.value >= 0xF700 && scalar.value <= 0xF8FF {
+                return nil
+            }
+        }
+        return chars
     }
 
     override func keyUp(with event: NSEvent) {
@@ -557,6 +607,7 @@ class TerminalNSView: NSView {
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard event.type == .keyDown else { return false }
         guard let surface = self.surface else { return false }
 
         // If the IME is composing and the key has no Cmd modifier, don't
@@ -567,21 +618,26 @@ class TerminalNSView: NSView {
             return false
         }
 
-        // Let Cmd+key shortcuts reach the menu system (Cmd+Q, Cmd+T, Cmd+W, etc.)
-        // Only intercept if ghostty has an explicit keybinding AND it's not a standard menu shortcut.
+        // Check if this event matches a Ghostty keybinding
+        var keyEvent = ghosttyKeyInput(for: event)
+        let text = event.characters ?? ""
+        var flags = ghostty_binding_flags_e(rawValue: 0)
+        let isBinding = text.withCString { ptr in
+            keyEvent.text = ptr
+            return ghostty_surface_key_is_binding(surface, keyEvent, &flags)
+        }
+
+        if isBinding {
+            // Route through keyDown for full text handling
+            keyDown(with: event)
+            return true
+        }
+
+        // Let Cmd+key shortcuts reach the menu system
         if event.modifierFlags.contains(.command) {
-            // Check if there's a menu item for this key — if so, don't intercept
             if NSApp.mainMenu?.performKeyEquivalent(with: event) == true {
                 return true
             }
-        }
-
-        let input = ghosttyKeyInput(for: event)
-
-        // Let ghostty handle its keybindings
-        var flags: ghostty_binding_flags_e = ghostty_binding_flags_e(rawValue: 0)
-        if ghostty_surface_key_is_binding(surface, input, &flags) {
-            return ghostty_surface_key(surface, input)
         }
 
         // Forward arrow/function keys that macOS might otherwise intercept

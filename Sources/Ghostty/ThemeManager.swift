@@ -35,7 +35,7 @@ class ThemeManager {
         var searchDirs: [String] = []
 
         // 1. Bundled themes (shipped with Deckard in the app bundle)
-        if let bundledThemes = Bundle.main.resourceURL?.appendingPathComponent("themes").path {
+        if let bundledThemes = Bundle.main.resourceURL?.appendingPathComponent("ghostty/themes").path {
             searchDirs.append(bundledThemes)
         }
 
