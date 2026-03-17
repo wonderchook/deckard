@@ -61,7 +61,7 @@ class TerminalNSView: NSView {
         if let eventMonitor {
             NSEvent.removeMonitor(eventMonitor)
         }
-        callbackContext?.release()
+        destroySurface()
     }
 
     // MARK: - Surface Lifecycle
@@ -160,12 +160,24 @@ class TerminalNSView: NSView {
     }
 
     func destroySurface() {
-        if let surface = self.surface {
-            ghostty_surface_free(surface)
-            self.surface = nil
+        let surface = self.surface
+        let ctx = self.callbackContext
+        self.surface = nil
+        self.callbackContext = nil
+
+        // Remove from view hierarchy first so the renderer stops drawing.
+        removeFromSuperview()
+
+        // Free the ghostty surface on a background queue to avoid deadlocking
+        // the main thread with the renderer's lock (see issue #5).
+        if let surface = surface {
+            DispatchQueue.global(qos: .utility).async {
+                ghostty_surface_free(surface)
+                ctx?.release()
+            }
+        } else {
+            ctx?.release()
         }
-        callbackContext?.release()
-        callbackContext = nil
     }
 
     // MARK: - View Lifecycle
@@ -409,6 +421,24 @@ class TerminalNSView: NSView {
             return (event, event.modifierFlags)
         }
 
+        // Don't reconstruct events for non-printable keys (backspace, delete,
+        // arrows, function keys, etc.). characters(byApplyingModifiers:) returns
+        // wrong characters for these keys (e.g. space for backspace).
+        let kc = Int(event.keyCode)
+        let nonPrintable: Set<Int> = [
+            51,  // backspace
+            117, // forward delete
+            36,  // return
+            76,  // numpad enter
+            48,  // tab
+            53,  // escape
+            123, 124, 125, 126, // arrow keys
+            115, 116, 119, 121, // home, page up, end, page down
+        ]
+        if nonPrintable.contains(kc) {
+            return (event, translationMods)
+        }
+
         let reconstructed = NSEvent.keyEvent(
             with: event.type,
             location: event.locationInWindow,
@@ -444,6 +474,22 @@ class TerminalNSView: NSView {
         if event.modifierFlags.contains(.control) && !event.modifierFlags.contains(.command) {
             _ = ghostty_surface_key(surface, input)
             return
+        }
+
+        // Fast path for non-printable keys (backspace, delete, arrows, etc.) —
+        // interpretKeyEvents can produce spurious text for these (e.g. space for
+        // backspace). Send them directly to ghostty as raw key events.
+        // Exception: allow through if IME is composing so backspace can edit preedit.
+        if !hasMarkedText() {
+            let kc = event.keyCode
+            if kc == 51 || kc == 117 || // backspace, forward delete
+               kc == 36 || kc == 76 ||  // return, numpad enter
+               kc == 48 || kc == 53 ||  // tab, escape
+               (kc >= 123 && kc <= 126) || // arrow keys
+               kc == 115 || kc == 116 || kc == 119 || kc == 121 { // home, pgup, end, pgdn
+                _ = ghostty_surface_key(surface, input)
+                return
+            }
         }
 
         let markedTextBefore = markedText.length > 0

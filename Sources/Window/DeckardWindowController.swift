@@ -447,7 +447,6 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         // Destroy all surfaces
         for tab in project.tabs {
             tab.surfaceView.destroySurface()
-            tab.surfaceView.removeFromSuperview()
         }
 
         projects.remove(at: index)
@@ -565,7 +564,6 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
 
         let tab = project.tabs[idx]
         tab.surfaceView.destroySurface()
-        tab.surfaceView.removeFromSuperview()
         project.tabs.remove(at: idx)
 
         if project.tabs.isEmpty {
@@ -805,7 +803,6 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
             if let ti = project.tabs.firstIndex(where: { $0.id == surfaceId }) {
                 let tab = project.tabs[ti]
                 tab.surfaceView.destroySurface()
-                tab.surfaceView.removeFromSuperview()
                 project.tabs.remove(at: ti)
 
                 if project.tabs.isEmpty {
@@ -1276,7 +1273,6 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
 
         let tab = project.tabs[idx]
         tab.surfaceView.destroySurface()
-        tab.surfaceView.removeFromSuperview()
         project.tabs.remove(at: idx)
 
         if project.tabs.isEmpty {
