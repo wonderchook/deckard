@@ -13,7 +13,9 @@ Run multiple sessions side by side in a single window with tabs, projects, and s
 - **Multi-tab sessions**: Open multiple Claude Code (and plain terminal) tabs per project. Switch between them with Cmd+1–9 or drag to reorder.
 - **Project sidebar**: Organize work by folder. Each project gets its own set of tabs, persisted across restarts.
 - **Context usage tracking**: A progress bar shows how much of Claude's context window the active session has consumed.
-- **Session state detection**: Tab badges show whether Claude is thinking, waiting for input, needs tool permission, or has errored.
+- **Session state detection**: Tab badges show whether Claude is thinking, waiting for input, needs tool permission, or has errored. Terminal tabs show CPU/disk activity.
+- **Session persistence**: Claude sessions are saved across restarts. Relaunch Deckard and pick up where you left off.
+- **Themes**: Hundreds of Ghostty themes, selectable from Settings. Deckard also reads your `~/.config/ghostty/config`.
 - **GPU-accelerated rendering**: Terminal surfaces are rendered through Metal via Ghostty's libghostty.
 
 ## Requirements
@@ -37,16 +39,19 @@ The built app will be in your Xcode DerivedData directory.
 
 ## Keyboard Shortcuts
 
+All shortcuts can be customized in Settings → Shortcuts. Defaults:
+
 | Shortcut | Action |
 |---|---|
 | Cmd+T | New Claude tab |
 | Shift+Cmd+T | New terminal tab |
 | Cmd+W | Close tab |
-| Shift+Cmd+W | Close project |
+| Shift+Cmd+W | Close folder |
 | Cmd+1–9 | Jump to tab |
 | Shift+Cmd+[ / ] | Previous / next tab |
 | Cmd+O | Open folder |
 | Ctrl+Cmd+S | Toggle sidebar |
+| Cmd+, | Settings |
 
 ## How It Works
 

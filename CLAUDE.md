@@ -18,20 +18,19 @@ open /Users/gilles/Library/Developer/Xcode/DerivedData/Deckard-hkgvzqxyznptcubaw
 
 ## Releasing a New Version
 
-### Version locations (update all 4)
+### Version locations (update all 3)
 
 1. `Resources/Info.plist` — `CFBundleShortVersionString`
 2. `Sources/Window/SettingsWindow.swift` — version label in About pane
-3. `Resources/bin/deckard-mcp` — `serverInfo.version` in MCP initialize response
-4. `README.md` — download badge version
+3. `README.md` — download badge version
 
 ### Steps
 
 ```bash
-# 1. Bump version in all 4 files above
+# 1. Bump version in all 3 files above
 
 # 2. Commit and push
-git add Resources/Info.plist Sources/Window/SettingsWindow.swift Resources/bin/deckard-mcp README.md
+git add Resources/Info.plist Sources/Window/SettingsWindow.swift README.md
 git commit -m "Bump version to X.Y.Z"
 git push
 

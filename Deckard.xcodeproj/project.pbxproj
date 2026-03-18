@@ -18,7 +18,6 @@
 		432752F9187D2E815F617B96 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88AA91CDBC6DDE958543FB29 /* main.swift */; };
 		63A33F81DE38406C15D1259A /* SettingsWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD37F7C8CC5243DCF0A1346E /* SettingsWindow.swift */; };
 		70265FBBA52FB6E60AE4EFFE /* ProjectPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BE07F0C0F9D62925EF195F7 /* ProjectPicker.swift */; };
-		785E265799B23197E43628CF /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5EB9FA577948DC32DED47B7 /* NotificationManager.swift */; };
 		7E500DC8ECF3F7D073A098A4 /* ControlSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = D08100E22096E7498D571A20 /* ControlSocket.swift */; };
 
 		A0FF9B9E99BC8B33FDCAB7E5 /* HookHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B375A023FEBCB272DCFD7 /* HookHandler.swift */; };
@@ -43,7 +42,6 @@
 		8391EFB62A21AFA1DA62733F /* DeckardWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeckardWindowController.swift; sourceTree = "<group>"; };
 		88AA91CDBC6DDE958543FB29 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		A32278396B92132B3CE7A5A4 /* Deckard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Deckard.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A5EB9FA577948DC32DED47B7 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		A605D524B1CC5AAC25147C77 /* DeckardGhosttyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeckardGhosttyApp.swift; sourceTree = "<group>"; };
 		D08100E22096E7498D571A20 /* ControlSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlSocket.swift; sourceTree = "<group>"; };
 
@@ -76,7 +74,6 @@
 				E5FD7F070DDB4216278EFDE6 /* ContextMonitor.swift */,
 				DD330002DD330002DD330002 /* DiagnosticLog.swift */,
 				4A2B375A023FEBCB272DCFD7 /* HookHandler.swift */,
-				A5EB9FA577948DC32DED47B7 /* NotificationManager.swift */,
 				DD220002DD220002DD220002 /* ProcessMonitor.swift */,
 			);
 			path = Detection;
@@ -234,7 +231,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "mkdir -p \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/bin\"\ncp -f \"${PROJECT_DIR}/Resources/AppIcon.icns\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/AppIcon.icns\"\ncp -f \"${PROJECT_DIR}/Resources/Credits.html\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Credits.html\"\ncp -f \"${PROJECT_DIR}/Resources/bin/claude\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/bin/claude\"\ncp -f \"${PROJECT_DIR}/Resources/bin/deckard-mcp\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/bin/deckard-mcp\"\nchmod +x \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/bin/claude\"\nchmod +x \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/bin/deckard-mcp\"\n# Copy Ghostty resources into the app bundle (skip if not available, e.g. CI)\n# Layout: Resources/ghostty/{themes,shell-integration} + Resources/terminfo\n# GHOSTTY_RESOURCES_DIR points to Resources/ghostty\nGHOSTTY_SRC=\"${PROJECT_DIR}/ghostty/zig-out/share\"\nGHOSTTY_DST=\"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ghostty\"\nif [ -d \"${GHOSTTY_SRC}/ghostty/themes\" ]; then\n  mkdir -p \"${GHOSTTY_DST}\"\n  rsync -a --delete \"${GHOSTTY_SRC}/ghostty/themes/\" \"${GHOSTTY_DST}/themes/\"\n  rsync -a --delete \"${GHOSTTY_SRC}/ghostty/shell-integration/\" \"${GHOSTTY_DST}/shell-integration/\"\nfi\nif [ -d \"${GHOSTTY_SRC}/terminfo\" ]; then\n  rsync -a --delete \"${GHOSTTY_SRC}/terminfo/\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/terminfo/\"\nfi\n";
+			shellScript = "mkdir -p \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/bin\"\ncp -f \"${PROJECT_DIR}/Resources/AppIcon.icns\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/AppIcon.icns\"\ncp -f \"${PROJECT_DIR}/Resources/Credits.html\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Credits.html\"\ncp -f \"${PROJECT_DIR}/Resources/bin/claude\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/bin/claude\"\nchmod +x \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/bin/claude\"\n# Copy Ghostty resources into the app bundle (skip if not available, e.g. CI)\n# Layout: Resources/ghostty/{themes,shell-integration} + Resources/terminfo\n# GHOSTTY_RESOURCES_DIR points to Resources/ghostty\nGHOSTTY_SRC=\"${PROJECT_DIR}/ghostty/zig-out/share\"\nGHOSTTY_DST=\"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ghostty\"\nif [ -d \"${GHOSTTY_SRC}/ghostty/themes\" ]; then\n  mkdir -p \"${GHOSTTY_DST}\"\n  rsync -a --delete \"${GHOSTTY_SRC}/ghostty/themes/\" \"${GHOSTTY_DST}/themes/\"\n  rsync -a --delete \"${GHOSTTY_SRC}/ghostty/shell-integration/\" \"${GHOSTTY_DST}/shell-integration/\"\nfi\nif [ -d \"${GHOSTTY_SRC}/terminfo\" ]; then\n  rsync -a --delete \"${GHOSTTY_SRC}/terminfo/\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/terminfo/\"\nfi\n";
 		};
 		5F4D41CAC0165B5C0FC120FE /* Set App Icon */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -267,7 +264,6 @@
 				41C3D848646ABF112104F6A4 /* DeckardGhosttyApp.swift in Sources */,
 				37FA9D946FD6ECA1DDF5898A /* DeckardWindowController.swift in Sources */,
 				A0FF9B9E99BC8B33FDCAB7E5 /* HookHandler.swift in Sources */,
-				785E265799B23197E43628CF /* NotificationManager.swift in Sources */,
 				70265FBBA52FB6E60AE4EFFE /* ProjectPicker.swift in Sources */,
 				2D322E22D0679FD39D688539 /* SessionState.swift in Sources */,
 				63A33F81DE38406C15D1259A /* SettingsWindow.swift in Sources */,
