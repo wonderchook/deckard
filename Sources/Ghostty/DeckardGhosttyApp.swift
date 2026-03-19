@@ -9,6 +9,17 @@ class DeckardGhosttyApp {
     private(set) var config: ghostty_config_t?
     private(set) var defaultBackgroundColor: NSColor = .windowBackgroundColor
     private(set) var defaultForegroundColor: NSColor = .labelColor
+
+    /// Path to a Deckard-specific ghostty config file (loaded last to override defaults).
+    static let deckardConfigPath: String = {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let dir = appSupport.appendingPathComponent("Deckard")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let path = dir.appendingPathComponent("ghostty-overrides").path
+        // Write Deckard defaults (idempotent — always overwritten on launch)
+        try? "macos-hush-login = true\n".write(toFile: path, atomically: true, encoding: .utf8)
+        return path
+    }()
     /// Coalesces rapid wakeup signals from libghostty's I/O thread into a single
     /// tick() call on the main thread, preventing main queue starvation during
     /// heavy terminal output.
@@ -50,6 +61,12 @@ class DeckardGhosttyApp {
             overridePath.withCString { ptr in
                 ghostty_config_load_file(primaryConfig, ptr)
             }
+        }
+
+        // Load Deckard-specific config overrides (suppress "Last login", etc.)
+        let deckardConfigPath = Self.deckardConfigPath
+        deckardConfigPath.withCString { ptr in
+            ghostty_config_load_file(primaryConfig, ptr)
         }
 
         ghostty_config_finalize(primaryConfig)
@@ -294,6 +311,10 @@ class DeckardGhosttyApp {
             overridePath.withCString { ptr in
                 ghostty_config_load_file(newConfig, ptr)
             }
+        }
+
+        Self.deckardConfigPath.withCString { ptr in
+            ghostty_config_load_file(newConfig, ptr)
         }
 
         ghostty_config_finalize(newConfig)
