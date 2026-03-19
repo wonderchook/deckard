@@ -5,7 +5,8 @@
       "bump-minor-pre-major": true,
       "extra-files": [
         "Resources/Info.plist",
-        "Sources/Window/SettingsWindow.swift"
+        "Sources/Window/SettingsWindow.swift",
+        "README.md"
       ]
     }
   }

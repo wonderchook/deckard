@@ -32,8 +32,7 @@ These files contain `x-release-please-version` annotations and are bumped automa
 
 1. `Resources/Info.plist` — `CFBundleShortVersionString`
 2. `Sources/Window/SettingsWindow.swift` — version label in About pane
-
-The `README.md` badge version is not managed by release-please (shields.io URL format conflicts with the generic replacer) — update it manually when needed.
+3. `README.md` — download badge version (uses shields.io query-param format to avoid conflicts with the generic replacer)
 
 Do not bump versions manually — merge the release-please PR instead.
 
