@@ -165,7 +165,9 @@ class TerminalNSView: NSView {
         if surface == nil {
             callbackContext?.release()
             callbackContext = nil
-            print("Failed to create ghostty surface for tab \(tabId)")
+            DiagnosticLog.shared.log("surface", "FAILED to create ghostty surface for tab \(tabId)")
+        } else {
+            DiagnosticLog.shared.log("surface", "created surface \(surfaceId) for tab \(tabId)")
         }
 
         updateTrackingAreas()
@@ -181,13 +183,17 @@ class TerminalNSView: NSView {
         // Remove from view hierarchy first so the renderer stops drawing.
         removeFromSuperview()
 
-        // Free the ghostty surface on the surface queue so any pending key/text
-        // events complete before the surface is freed (avoids main-thread deadlock
-        // with the renderer's lock — see issue #5).
+        // Free the ghostty surface on a background queue to avoid deadlocking
+        // the main thread with the renderer's lock (see issue #5).
+        // Drain surfaceQueue first so pending key/text events don't use a
+        // freed surface, then free on the global queue.
         if let surface = surface {
-            surfaceQueue.async {
-                ghostty_surface_free(surface)
-                ctx?.release()
+            let queue = surfaceQueue
+            queue.async {
+                DispatchQueue.global(qos: .utility).async {
+                    ghostty_surface_free(surface)
+                    ctx?.release()
+                }
             }
         } else {
             ctx?.release()
