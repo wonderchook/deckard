@@ -591,6 +591,8 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
                 guard let self else { return }
                 for project in self.projects {
                     if let t = project.tabs.first(where: { $0.id == tabId }), !t.sessionStarted {
+                        DiagnosticLog.shared.log("surface",
+                            "safety timeout: revealing Claude tab \(tabId) (hook.session-start never received)")
                         t.sessionStarted = true
                         if t.surfaceView.superview != nil { t.surfaceView.isHidden = false }
                     }

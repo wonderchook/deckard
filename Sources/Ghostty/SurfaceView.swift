@@ -44,6 +44,9 @@ class TerminalNSView: NSView {
     private var lastSuccessfulCharKeyTime: TimeInterval = 0
     /// When becomeFirstResponder last succeeded.
     private var focusGainedTime: TimeInterval = 0
+    /// Serial queue for ghostty surface calls that acquire the renderer/IO lock.
+    /// Avoids deadlocking the main thread (same pattern as destroySurface/set_focus).
+    private let surfaceQueue = DispatchQueue(label: "com.deckard.surface-io", qos: .userInteractive)
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -178,10 +181,11 @@ class TerminalNSView: NSView {
         // Remove from view hierarchy first so the renderer stops drawing.
         removeFromSuperview()
 
-        // Free the ghostty surface on a background queue to avoid deadlocking
-        // the main thread with the renderer's lock (see issue #5).
+        // Free the ghostty surface on the surface queue so any pending key/text
+        // events complete before the surface is freed (avoids main-thread deadlock
+        // with the renderer's lock — see issue #5).
         if let surface = surface {
-            DispatchQueue.global(qos: .utility).async {
+            surfaceQueue.async {
                 ghostty_surface_free(surface)
                 ctx?.release()
             }
@@ -480,11 +484,11 @@ class TerminalNSView: NSView {
         if let list = keyTextAccumulator, !list.isEmpty {
             // Composed text from IME — never composing.
             for text in list {
-                _ = keyAction(action, event: event,
+                keyAction(action, event: event,
                               translationMods: translationMods, text: text)
             }
         } else {
-            _ = keyAction(action, event: event,
+            keyAction(action, event: event,
                           translationMods: translationMods,
                           text: Self.ghosttyCharacters(for: translationEvent),
                           composing: markedText.length > 0 || markedTextBefore)
@@ -497,7 +501,7 @@ class TerminalNSView: NSView {
         guard event.eventNumber != lastHandledKeyUpEventNumber else { return }
         lastHandledKeyUpEventNumber = event.eventNumber
 
-        _ = keyAction(GHOSTTY_ACTION_RELEASE, event: event)
+        keyAction(GHOSTTY_ACTION_RELEASE, event: event)
     }
 
     override func flagsChanged(with event: NSEvent) {
@@ -522,7 +526,7 @@ class TerminalNSView: NSView {
             action = GHOSTTY_ACTION_PRESS
         }
 
-        _ = keyAction(action, event: event)
+        keyAction(action, event: event)
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -635,47 +639,58 @@ class TerminalNSView: NSView {
 
     /// Send a key event to Ghostty. Based on Ghostty's keyAction (MIT).
     /// Text is only sent if the first codepoint is printable (>= 0x20).
-    @discardableResult
+    /// Dispatched to surfaceQueue to avoid deadlocking the main thread with
+    /// libghostty's renderer/IO lock (same pattern as destroySurface/set_focus).
     private func keyAction(
         _ action: ghostty_input_action_e,
         event: NSEvent,
         translationMods: NSEvent.ModifierFlags? = nil,
         text: String? = nil,
         composing: Bool = false
-    ) -> Bool {
-        guard let surface = self.surface else { return false }
+    ) {
+        guard let surface = self.surface else { return }
 
         var keyEv = Self.ghosttyKeyEvent(event, action, translationMods: translationMods)
         keyEv.composing = composing
 
-        let start = ProcessInfo.processInfo.systemUptime
-        let result: Bool
-        if let text, !text.isEmpty,
-           let codepoint = text.utf8.first, codepoint >= 0x20 {
-            result = text.withCString { ptr in
-                keyEv.text = ptr
-                return ghostty_surface_key(surface, keyEv)
+        // Capture values for the async block. The text String is copied by value
+        // (not as a C pointer) so it remains valid across the dispatch boundary.
+        let keyCode = event.keyCode
+        let isModifierOnly = [55, 56, 57, 58, 59, 60, 61, 62, 63].contains(Int(keyCode))
+        let isCharAction = !isModifierOnly && (action == GHOSTTY_ACTION_PRESS || action == GHOSTTY_ACTION_REPEAT)
+        let printableText: String? = if let text, !text.isEmpty,
+           let codepoint = text.utf8.first, codepoint >= 0x20 { text } else { nil }
+        let focusGained = focusGainedTime
+        let sid = surfaceId
+
+        surfaceQueue.async { [weak self] in
+            let start = ProcessInfo.processInfo.systemUptime
+            let result: Bool
+            if let printableText {
+                result = printableText.withCString { ptr in
+                    keyEv.text = ptr
+                    return ghostty_surface_key(surface, keyEv)
+                }
+            } else {
+                result = ghostty_surface_key(surface, keyEv)
             }
-        } else {
-            result = ghostty_surface_key(surface, keyEv)
-        }
 
-        let elapsed = ProcessInfo.processInfo.systemUptime - start
+            let elapsed = ProcessInfo.processInfo.systemUptime - start
 
-        // Track successful character key actions (non-modifier press/repeat)
-        let isModifierOnly = [55, 56, 57, 58, 59, 60, 61, 62, 63].contains(Int(event.keyCode))
-        if result && !isModifierOnly && (action == GHOSTTY_ACTION_PRESS || action == GHOSTTY_ACTION_REPEAT) {
-            lastSuccessfulCharKeyTime = start
-        }
+            // Track successful character key actions (non-modifier press/repeat).
+            // Benign race with keyDown's stuck detection (read on main thread).
+            if result && isCharAction {
+                self?.lastSuccessfulCharKeyTime = start
+            }
 
-        // Verbose logging for first 5s after focus gain, or on failure/slowness
-        let sinceFocus = start - focusGainedTime
-        if elapsed > 0.1 || !result || (sinceFocus < 5 && !isModifierOnly) {
-            DiagnosticLog.shared.log("input",
-                "keyAction: keyCode=\(event.keyCode) result=\(result) elapsed=\(String(format: "%.3f", elapsed))s surfaceId=\(surfaceId)" +
-                (sinceFocus < 5 ? " [VERBOSE sinceFocus=\(String(format: "%.1f", sinceFocus))s]" : ""))
+            // Verbose logging for first 5s after focus gain, or on failure/slowness
+            let sinceFocus = start - focusGained
+            if elapsed > 0.1 || !result || (sinceFocus < 5 && !isModifierOnly) {
+                DiagnosticLog.shared.log("input",
+                    "keyAction: keyCode=\(keyCode) result=\(result) elapsed=\(String(format: "%.3f", elapsed))s surfaceId=\(sid)" +
+                    (sinceFocus < 5 ? " [VERBOSE sinceFocus=\(String(format: "%.1f", sinceFocus))s]" : ""))
+            }
         }
-        return result
     }
 
     /// Build a ghostty_input_key_s from an NSEvent.
@@ -726,15 +741,20 @@ class TerminalNSView: NSView {
     private func syncPreedit(clearIfNeeded: Bool = true) {
         guard let surface = self.surface else { return }
         if markedText.length > 0 {
+            // Capture the string by value for async dispatch.
             let str = markedText.string
-            let len = str.utf8CString.count
-            if len > 0 {
-                str.withCString { ptr in
-                    ghostty_surface_preedit(surface, ptr, UInt(len - 1))
+            surfaceQueue.async {
+                let len = str.utf8CString.count
+                if len > 0 {
+                    str.withCString { ptr in
+                        ghostty_surface_preedit(surface, ptr, UInt(len - 1))
+                    }
                 }
             }
         } else if clearIfNeeded {
-            ghostty_surface_preedit(surface, nil, 0)
+            surfaceQueue.async {
+                ghostty_surface_preedit(surface, nil, 0)
+            }
         }
     }
 
@@ -750,15 +770,19 @@ class TerminalNSView: NSView {
 
         if let urls = pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL], !urls.isEmpty {
             let text = urls.map { $0.isFileURL ? shellEscape($0.path) : $0.absoluteString }.joined(separator: " ")
-            text.withCString { ptr in
-                ghostty_surface_text(surface, ptr, UInt(text.utf8.count))
+            surfaceQueue.async {
+                text.withCString { ptr in
+                    ghostty_surface_text(surface, ptr, UInt(text.utf8.count))
+                }
             }
             return true
         }
 
         if let text = pasteboard.string(forType: .string) {
-            text.withCString { ptr in
-                ghostty_surface_text(surface, ptr, UInt(text.utf8.count))
+            surfaceQueue.async {
+                text.withCString { ptr in
+                    ghostty_surface_text(surface, ptr, UInt(text.utf8.count))
+                }
             }
             return true
         }
