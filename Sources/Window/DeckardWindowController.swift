@@ -563,8 +563,9 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
                     tab.sessionId = nil
                 }
             }
-            // exec replaces the shell with claude (no parent shell lingering)
-            initialInput = "exec \(binPath)/claude\(claudeArgs)\n"
+            // clear hides the echoed command; exec replaces the shell with claude.
+            // Just call "claude" — it must be in the user's PATH (standard install).
+            initialInput = "clear && exec claude\(claudeArgs)\n"
         } else {
             initialInput = nil
         }
