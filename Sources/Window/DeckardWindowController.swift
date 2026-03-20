@@ -565,10 +565,10 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
             command = "direct:\(binPath)/register-pid \(sid) \(socketPath) --login \(binPath)/claude\(claudeArgs)"
             initialInput = nil
         } else {
-            // direct: prefix bypasses ghostty's login(1) wrapper.
-            // register-pid --login provides the login shell.
+            // Exec the user's shell directly with -l for login mode.
+            // Don't use --login (POSIX wrapper) — it breaks non-POSIX shells like fish.
             let userShell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
-            command = "direct:\(binPath)/register-pid \(sid) \(socketPath) --login \(userShell)"
+            command = "direct:\(binPath)/register-pid \(sid) \(socketPath) \(userShell) -l"
             initialInput = nil
         }
 
