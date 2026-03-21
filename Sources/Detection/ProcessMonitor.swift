@@ -110,11 +110,11 @@ class ProcessMonitor {
             }
         }
 
-        // Clean up stale tracking data
-        let activeLogins = Set(terminalTabs.compactMap { cachedPids[$0.surfaceId]?.login })
-        lastFgPids = lastFgPids.filter { activeLogins.contains($0.key) }
-        lastCpuTimes = lastCpuTimes.filter { activeLogins.contains($0.key) }
-        lastDiskBytes = lastDiskBytes.filter { activeLogins.contains($0.key) }
+        // Clean up stale tracking data (keyed by shell PID)
+        let activeShells = Set(terminalTabs.compactMap { cachedPids[$0.surfaceId]?.shell })
+        lastFgPids = lastFgPids.filter { activeShells.contains($0.key) }
+        lastCpuTimes = lastCpuTimes.filter { activeShells.contains($0.key) }
+        lastDiskBytes = lastDiskBytes.filter { activeShells.contains($0.key) }
 
         return results
     }
@@ -122,7 +122,7 @@ class ProcessMonitor {
     // MARK: - Activity Detection
 
     private func checkActivity(pids: (login: pid_t, shell: pid_t), tab: TabInfo) -> ActivityInfo {
-        let loginPid = pids.login
+        let key = pids.shell  // unique per tab (login PID is shared in direct: mode)
         guard let info = getKInfoProc(pid: pids.shell) else { return ActivityInfo() }
 
         let shellPgid = info.kp_eproc.e_pgid
@@ -130,7 +130,7 @@ class ProcessMonitor {
 
         // Shell itself is foreground → at prompt
         if shellPgid == termFgPgid {
-            lastFgPids[loginPid] = nil
+            lastFgPids[key] = nil
             return ActivityInfo()
         }
 
@@ -141,30 +141,30 @@ class ProcessMonitor {
         guard let cpuTime = getCpuTime(pid: fgPid) else { return ActivityInfo() }
         let diskBytes = getDiskBytes(pid: fgPid) ?? 0
 
-        // First time seeing this login — just set baseline, don't pulse
-        if lastFgPids[loginPid] == nil {
-            lastFgPids[loginPid] = fgPid
-            lastCpuTimes[loginPid] = cpuTime
-            lastDiskBytes[loginPid] = diskBytes
+        // First time seeing this foreground process — just set baseline, don't pulse
+        if lastFgPids[key] == nil {
+            lastFgPids[key] = fgPid
+            lastCpuTimes[key] = cpuTime
+            lastDiskBytes[key] = diskBytes
             return ActivityInfo()
         }
 
         // Foreground process changed — new command started
-        if lastFgPids[loginPid] != fgPid {
-            lastFgPids[loginPid] = fgPid
-            lastCpuTimes[loginPid] = cpuTime
-            lastDiskBytes[loginPid] = diskBytes
+        if lastFgPids[key] != fgPid {
+            lastFgPids[key] = fgPid
+            lastCpuTimes[key] = cpuTime
+            lastDiskBytes[key] = diskBytes
             let result = ActivityInfo(cpu: true)
             DiagnosticLog.shared.log("processmon",
                 "ACTIVE: project=\(tab.projectPath) tab=\"\(tab.name)\" " +
-                "login=\(loginPid) fg=\(fgPid) reason=fg_changed")
+                "shell=\(key) fg=\(fgPid) reason=fg_changed")
             return result
         }
 
-        let prevCpu = lastCpuTimes[loginPid] ?? cpuTime
-        let prevDisk = lastDiskBytes[loginPid] ?? diskBytes
-        lastCpuTimes[loginPid] = cpuTime
-        lastDiskBytes[loginPid] = diskBytes
+        let prevCpu = lastCpuTimes[key] ?? cpuTime
+        let prevDisk = lastDiskBytes[key] ?? diskBytes
+        lastCpuTimes[key] = cpuTime
+        lastDiskBytes[key] = diskBytes
 
         let cpuDelta = cpuTime &- prevCpu
         let diskDelta = diskBytes > prevDisk ? diskBytes - prevDisk : 0
@@ -178,7 +178,7 @@ class ProcessMonitor {
             if diskActive { reasons.append("disk=+\(diskDelta)B") }
             DiagnosticLog.shared.log("processmon",
                 "ACTIVE: project=\(tab.projectPath) tab=\"\(tab.name)\" " +
-                "login=\(loginPid) fg=\(fgPid) \(reasons.joined(separator: " "))")
+                "shell=\(key) fg=\(fgPid) \(reasons.joined(separator: " "))")
         }
 
         return result
