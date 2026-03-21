@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.0](https://github.com/gi11es/deckard/compare/v0.2.0...v0.3.0) (2026-03-21)
+
+
+### Features
+
+* add crash reporter and startup diagnostic logging ([2cb04aa](https://github.com/gi11es/deckard/commit/2cb04aa99cb1feb5382ecf49dc948c57091d305b))
+* migrate from libghostty to SwiftTerm ([a22158d](https://github.com/gi11es/deckard/commit/a22158dfceafbd15eb68250cc248408b9bd542d7))
+* surface handling parity with Ghostty upstream ([37c16e9](https://github.com/gi11es/deckard/commit/37c16e9dbf0038670da2dde0abc2d7067f830910))
+
+
+### Bug Fixes
+
+* prevent deadlock and crashes from rapid tab creation ([3a78b15](https://github.com/gi11es/deckard/commit/3a78b15ab95e7dc48c647b6da0ce1a053da7206e))
+* single-active-view model for terminal surfaces ([8fb7bec](https://github.com/gi11es/deckard/commit/8fb7becf8fd361389f607dc815dc778537e16036))
+
 ## [0.2.0](https://github.com/gi11es/deckard/compare/v0.1.9...v0.2.0) (2026-03-21)
 
 
