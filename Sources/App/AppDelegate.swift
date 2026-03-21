@@ -11,12 +11,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let log = DiagnosticLog.shared
+        log.log("startup", "applicationDidFinishLaunching entered")
         Self.shared = self
 
         // Set GHOSTTY_RESOURCES_DIR BEFORE creating the Ghostty app so shell
         // integration, terminfo, and theme resolution work during config loading.
         // Layout: GHOSTTY_RESOURCES_DIR points to a dir with themes/ and shell-integration/,
         // with terminfo/ as a sibling (at ../terminfo).
+        log.log("startup", "Resolving GHOSTTY_RESOURCES_DIR...")
         let devResources = Bundle.main.bundlePath + "/../ghostty/zig-out/share/ghostty"
         let devTerminfo = Bundle.main.bundlePath + "/../ghostty/zig-out/share/terminfo"
         let bundleGhostty = (Bundle.main.resourcePath ?? "") + "/ghostty"
@@ -24,14 +27,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if FileManager.default.fileExists(atPath: devResources + "/shell-integration") {
             setenv("GHOSTTY_RESOURCES_DIR", devResources, 1)
             setenv("TERMINFO_DIRS", devTerminfo, 1)
+            log.log("startup", "Using dev resources: \(devResources)")
         } else if FileManager.default.fileExists(atPath: bundleGhostty + "/themes") {
             setenv("GHOSTTY_RESOURCES_DIR", bundleGhostty, 1)
             setenv("TERMINFO_DIRS", bundleTerminfo, 1)
+            log.log("startup", "Using bundle resources: \(bundleGhostty)")
+        } else {
+            log.log("startup", "WARNING: No ghostty resources found")
         }
 
         // Set up the Ghostty app wrapper (creates ghostty_app_t with callbacks).
+        log.log("startup", "Creating DeckardGhosttyApp...")
         ghosttyApp = DeckardGhosttyApp()
         guard ghosttyApp.app != nil else {
+            log.log("startup", "FATAL: DeckardGhosttyApp.app is nil — Ghostty engine failed to initialize")
             let alert = NSAlert()
             alert.messageText = "Failed to Initialize Terminal"
             alert.informativeText = "Could not create the Ghostty terminal engine. The app cannot continue."
@@ -40,26 +49,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
+        log.log("startup", "DeckardGhosttyApp created successfully")
 
         // Initialize theme manager and compute initial theme colors.
         // Note: no notification is posted here — the window controller doesn't exist yet.
         // It reads ThemeManager.shared.currentColors directly during its init.
+        log.log("startup", "Loading themes...")
         ThemeManager.shared.loadAvailableThemes()
         if let savedTheme = ThemeManager.shared.currentThemeName,
            let themeInfo = ThemeManager.shared.availableThemes.first(where: { $0.name == savedTheme }),
            let colors = ThemeManager.parseThemeColors(at: themeInfo.path) {
             ThemeManager.shared.currentColors = ThemeColors(background: colors.background, foreground: colors.foreground)
+            log.log("startup", "Applied saved theme: \(savedTheme)")
         } else {
             ThemeManager.shared.currentColors = ThemeColors(
                 background: ghosttyApp.defaultBackgroundColor,
                 foreground: ghosttyApp.defaultForegroundColor
             )
+            log.log("startup", "Using default theme colors")
         }
 
         // Set up the main menu.
+        log.log("startup", "Setting up main menu...")
         setupMainMenu()
 
         // Listen for notifications from ghostty callbacks.
+        log.log("startup", "Registering notification observers...")
         let nc = NotificationCenter.default
         nc.addObserver(self, selector: #selector(handleSurfaceClosed(_:)), name: .deckardSurfaceClosed, object: nil)
         nc.addObserver(self, selector: #selector(handleTitleChanged(_:)), name: .deckardSurfaceTitleChanged, object: nil)
@@ -67,6 +82,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         nc.addObserver(self, selector: #selector(handleCloseTab), name: .deckardCloseTab, object: nil)
 
         // Start the control socket for hook communication.
+        log.log("startup", "Starting control socket...")
         ControlSocket.shared.start()
         ControlSocket.shared.onMessage = { [weak self] message, reply in
             self?.hookHandler.handle(message, reply: reply)
@@ -74,17 +90,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Set socket path in environment for child processes.
         setenv("DECKARD_SOCKET_PATH", ControlSocket.shared.path, 1)
+        log.log("startup", "Control socket at: \(ControlSocket.shared.path ?? "(nil)")")
 
         // Install the /deckard feedback skill if gh CLI is available.
+        log.log("startup", "Installing Deckard skill...")
         installDeckardSkill()
 
         // Install Claude Code hooks so Deckard receives session events.
+        log.log("startup", "Installing Claude Code hooks...")
         DeckardHooksInstaller.installIfNeeded()
 
         // Create and show the main window.
+        log.log("startup", "Creating window controller...")
         windowController = DeckardWindowController(ghosttyApp: ghosttyApp)
         hookHandler.windowController = windowController
+        log.log("startup", "Showing main window...")
         windowController?.showWindow(nil)
+        log.log("startup", "=== Startup complete ===")
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
