@@ -6,10 +6,17 @@ class ControlSocket {
     static let shared = ControlSocket()
 
     private var serverSocket: Int32 = -1
-    private var socketPath: String = ""
+    private(set) var socketPath: String = ""
+
+    init(path: String? = nil) {
+        if let path = path {
+            socketPath = path
+        }
+    }
     private var listenSource: DispatchSourceRead?
     private var clientSources: [Int32: DispatchSourceRead] = [:]
     private let socketQueue = DispatchQueue(label: "com.deckard.control-socket")
+    private var healthTimer: DispatchSourceTimer?
 
     /// Callback for incoming messages.
     var onMessage: ((ControlMessage, @escaping (ControlResponse) -> Void) -> Void)?
@@ -18,18 +25,32 @@ class ControlSocket {
     var path: String { socketPath }
 
     func start() {
-        let tmpDir = ProcessInfo.processInfo.environment["TMPDIR"] ?? "/tmp"
-        socketPath = "\(tmpDir)deckard-\(getuid()).sock"
+        socketQueue.async { [weak self] in
+            self?.startOnQueue()
+        }
+    }
 
-        // Clean up old socket
+    private func startOnQueue() {
+        if socketPath.isEmpty {
+            let tmpDir = ProcessInfo.processInfo.environment["TMPDIR"] ?? "/tmp"
+            socketPath = "\(tmpDir)deckard-\(getuid()).sock"
+        }
+
+        // Tear down any existing listener before recreating
+        tearDownOnQueue()
+
+        // Clean up old socket file
         unlink(socketPath)
 
         // Create socket
         serverSocket = socket(AF_UNIX, SOCK_STREAM, 0)
         guard serverSocket >= 0 else {
-            print("Failed to create socket: \(errno)")
+            DiagnosticLog.shared.log("socket", "Failed to create socket: errno=\(errno)")
             return
         }
+
+        // Prevent children from inheriting the server socket fd
+        _ = fcntl(serverSocket, F_SETFD, FD_CLOEXEC)
 
         // Bind
         var addr = sockaddr_un()
@@ -49,35 +70,50 @@ class ControlSocket {
             }
         }
         guard bindResult == 0 else {
-            print("Failed to bind socket: \(errno)")
+            DiagnosticLog.shared.log("socket", "Failed to bind socket: errno=\(errno)")
             close(serverSocket)
+            serverSocket = -1
             return
         }
 
         // Listen
         guard listen(serverSocket, 5) == 0 else {
-            print("Failed to listen on socket: \(errno)")
+            DiagnosticLog.shared.log("socket", "Failed to listen on socket: errno=\(errno)")
             close(serverSocket)
+            serverSocket = -1
             return
         }
 
-        // Accept connections on a serial queue to protect shared state
+        // Accept connections on the serial queue
         let source = DispatchSource.makeReadSource(fileDescriptor: serverSocket, queue: socketQueue)
         source.setEventHandler { [weak self] in
             self?.acceptConnection()
         }
-        source.setCancelHandler { [weak self] in
-            if let fd = self?.serverSocket, fd >= 0 {
-                close(fd)
-            }
-        }
+        // Do NOT close serverSocket in the cancel handler — stop() handles that.
+        // Closing here caused the socket to die permanently when the source
+        // was cancelled unexpectedly (e.g. due to prior concurrent-queue bugs).
         source.resume()
         listenSource = source
 
-        print("Control socket listening at \(socketPath)")
+        // Start periodic health check
+        startHealthTimer()
+
+        DiagnosticLog.shared.log("socket", "Control socket listening at \(socketPath)")
     }
 
     func stop() {
+        socketQueue.sync { [weak self] in
+            self?.healthTimer?.cancel()
+            self?.healthTimer = nil
+            self?.tearDownOnQueue()
+            if let path = self?.socketPath {
+                unlink(path)
+            }
+        }
+    }
+
+    /// Tear down the listener and all client sources. Must be called on socketQueue.
+    private func tearDownOnQueue() {
         listenSource?.cancel()
         listenSource = nil
         for source in clientSources.values {
@@ -88,8 +124,52 @@ class ControlSocket {
             close(serverSocket)
             serverSocket = -1
         }
-        unlink(socketPath)
     }
+
+    // MARK: - Health Check
+
+    private func startHealthTimer() {
+        healthTimer?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: socketQueue)
+        timer.schedule(deadline: .now() + 30, repeating: 30)
+        timer.setEventHandler { [weak self] in
+            self?.checkHealth()
+        }
+        timer.resume()
+        healthTimer = timer
+    }
+
+    /// Try to connect to our own socket. If it fails, restart.
+    private func checkHealth() {
+        let probe = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard probe >= 0 else { return }
+
+        var addr = sockaddr_un()
+        addr.sun_family = sa_family_t(AF_UNIX)
+        let pathBytes = socketPath.utf8CString
+        let maxLen = MemoryLayout.size(ofValue: addr.sun_path)
+        pathBytes.withUnsafeBufferPointer { buf in
+            withUnsafeMutableBytes(of: &addr.sun_path) { dest in
+                let count = min(buf.count, maxLen)
+                dest.copyBytes(from: UnsafeRawBufferPointer(buf).prefix(count))
+            }
+        }
+
+        let result = withUnsafePointer(to: &addr) { addrPtr in
+            addrPtr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPtr in
+                connect(probe, sockaddrPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+        close(probe)
+
+        if result != 0 {
+            DiagnosticLog.shared.log("socket",
+                "Health check failed (errno=\(errno)), restarting control socket")
+            startOnQueue()
+        }
+    }
+
+    // MARK: - Connection Handling
 
     private func acceptConnection() {
         var clientAddr = sockaddr_un()

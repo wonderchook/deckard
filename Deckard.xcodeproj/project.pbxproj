@@ -45,6 +45,7 @@
 		AA1B0001AA1B0001AA1B0001 /* WindowControllerLogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1B0002AA1B0002AA1B0002 /* WindowControllerLogicTests.swift */; };
 		AA1C0001AA1C0001AA1C0001 /* DeckardHooksInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1C0002AA1C0002AA1C0002 /* DeckardHooksInstallerTests.swift */; };
 		AA1D0001AA1D0001AA1D0001 /* CrashReporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1D0002AA1D0002AA1D0002 /* CrashReporterTests.swift */; };
+		AA1E0001AA1E0001AA1E0001 /* ControlSocketTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1E0002AA1E0002AA1E0002 /* ControlSocketTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -87,6 +88,7 @@
 		AA1B0002AA1B0002AA1B0002 /* WindowControllerLogicTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowControllerLogicTests.swift; sourceTree = "<group>"; };
 		AA1C0002AA1C0002AA1C0002 /* DeckardHooksInstallerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeckardHooksInstallerTests.swift; sourceTree = "<group>"; };
 		AA1D0002AA1D0002AA1D0002 /* CrashReporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashReporterTests.swift; sourceTree = "<group>"; };
+		AA1E0002AA1E0002AA1E0002 /* ControlSocketTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlSocketTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -216,6 +218,7 @@
 				AA150002AA150002AA150002 /* ControlMessageTests.swift */,
 				AA190002AA190002AA190002 /* ContextMonitorTests.swift */,
 				AA1D0002AA1D0002AA1D0002 /* CrashReporterTests.swift */,
+				AA1E0002AA1E0002AA1E0002 /* ControlSocketTests.swift */,
 				AA1C0002AA1C0002AA1C0002 /* DeckardHooksInstallerTests.swift */,
 				AA160002AA160002AA160002 /* DiagnosticLogTests.swift */,
 				AA170002AA170002AA170002 /* HookHandlerTests.swift */,
@@ -391,6 +394,7 @@
 				AA1B0001AA1B0001AA1B0001 /* WindowControllerLogicTests.swift in Sources */,
 				AA1C0001AA1C0001AA1C0001 /* DeckardHooksInstallerTests.swift in Sources */,
 				AA1D0001AA1D0001AA1D0001 /* CrashReporterTests.swift in Sources */,
+				AA1E0001AA1E0001AA1E0001 /* ControlSocketTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

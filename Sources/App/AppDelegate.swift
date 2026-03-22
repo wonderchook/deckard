@@ -7,10 +7,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var windowController: DeckardWindowController?
     private let hookHandler = HookHandler()
 
+    /// True when launched as a test host by xctest.
+    static var isRunningTests: Bool {
+        NSClassFromString("XCTestCase") != nil
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         let log = DiagnosticLog.shared
         log.log("startup", "applicationDidFinishLaunching entered")
         Self.shared = self
+
+        // When running as a test host, skip all UI/socket setup.
+        if Self.isRunningTests {
+            log.log("startup", "Running as test host — skipping UI setup")
+            return
+        }
 
         // Load themes and apply saved selection.
         log.log("startup", "Loading themes...")
