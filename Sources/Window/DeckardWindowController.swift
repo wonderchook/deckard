@@ -95,7 +95,7 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
     private var selectedProjectIndex: Int = -1
 
     // Theme
-    private let colors = ThemeColors.default
+    private var colors: ThemeColors { ThemeManager.shared.currentColors }
 
     // UI
     private let splitView = CollapsibleSplitView()
@@ -136,9 +136,9 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         )
         window.title = "Deckard"
         window.minSize = NSSize(width: 600, height: 400)
-        window.backgroundColor = ThemeColors.default.background
+        window.backgroundColor = ThemeManager.shared.currentColors.background
         window.titlebarAppearsTransparent = true
-        window.appearance = ThemeColors.default.isDark
+        window.appearance = ThemeManager.shared.currentColors.isDark
             ? NSAppearance(named: .darkAqua) : NSAppearance(named: .aqua)
         window.tabbingMode = .disallowed
 
@@ -150,6 +150,8 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         }
 
         setupUI()
+
+        NotificationCenter.default.addObserver(self, selector: #selector(themeDidChange(_:)), name: .deckardThemeChanged, object: nil)
 
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification,
@@ -623,6 +625,17 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         guard tabIndex >= 0, tabIndex < project.tabs.count else { return }
         project.selectedTabIndex = tabIndex
         rebuildTabBar()
+        showTab(project.tabs[tabIndex])
+    }
+
+    /// Switch to a tab without rebuilding the tab bar.
+    /// Called from HorizontalTabView.mouseDown so the terminal switch
+    /// is not lost if an async rebuild destroys the view before mouseUp.
+    func switchToTab(at tabIndex: Int) {
+        guard let project = currentProject else { return }
+        guard tabIndex >= 0, tabIndex < project.tabs.count else { return }
+        guard tabIndex != project.selectedTabIndex else { return }
+        project.selectedTabIndex = tabIndex
         showTab(project.tabs[tabIndex])
     }
 
@@ -1230,6 +1243,28 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         return menu
     }
 
+    @objc private func themeDidChange(_ notification: Notification) {
+        guard let scheme = notification.userInfo?["scheme"] as? TerminalColorScheme else { return }
+
+        // Update chrome colors
+        let newColors = ThemeManager.shared.currentColors
+        window?.backgroundColor = newColors.background
+        window?.appearance = newColors.isDark
+            ? NSAppearance(named: .darkAqua) : NSAppearance(named: .aqua)
+        sidebarView.layer?.backgroundColor = newColors.sidebarBackground.cgColor
+        tabBar.layer?.backgroundColor = newColors.tabBarBackground.cgColor
+        emptyStateView?.layer?.backgroundColor = newColors.background.cgColor
+        rebuildSidebar()
+        rebuildTabBar()
+
+        // Apply color scheme to all terminal surfaces
+        for project in projects {
+            for tab in project.tabs {
+                tab.surface.applyColorScheme(scheme)
+            }
+        }
+    }
+
     @objc private func closeProjectMenuAction(_ sender: NSMenuItem) {
         guard let project = sender.representedObject as? ProjectItem,
               let pi = projects.firstIndex(where: { $0.id == project.id }) else { return }
@@ -1469,7 +1504,7 @@ class VerticalTabRowView: NSView, NSTextFieldDelegate, NSDraggingSource {
 
         label = NSTextField(labelWithString: title)
         label.font = bold ? .boldSystemFont(ofSize: 12) : .systemFont(ofSize: 12)
-        label.textColor = ThemeColors.default.primaryText
+        label.textColor = ThemeManager.shared.currentColors.primaryText
         label.lineBreakMode = .byTruncatingTail
         label.maximumNumberOfLines = 1
 
@@ -1502,7 +1537,7 @@ class VerticalTabRowView: NSView, NSTextFieldDelegate, NSDraggingSource {
 
     override func draw(_ dirtyRect: NSRect) {
         if isSelected {
-            ThemeColors.default.selectedBackground.setFill()
+            ThemeManager.shared.currentColors.selectedBackground.setFill()
             bounds.fill()
         }
     }
@@ -1702,7 +1737,7 @@ class HorizontalTabView: NSView, NSTextFieldDelegate, NSDraggingSource {
 
         label = NSTextField(labelWithString: displayTitle)
         label.font = .systemFont(ofSize: 12)
-        let tc = ThemeColors.default
+        let tc = ThemeManager.shared.currentColors
         label.textColor = isSelected ? tc.primaryText : tc.secondaryText
         label.lineBreakMode = .byTruncatingTail
         label.setContentHuggingPriority(.defaultHigh, for: .horizontal)
@@ -1753,7 +1788,7 @@ class HorizontalTabView: NSView, NSTextFieldDelegate, NSDraggingSource {
         NSLayoutConstraint.activate(constraints)
 
         if isSelected {
-            layer?.backgroundColor = ThemeColors.default.selectedBackground.cgColor
+            layer?.backgroundColor = ThemeManager.shared.currentColors.selectedBackground.cgColor
         }
 
     }
@@ -1767,14 +1802,17 @@ class HorizontalTabView: NSView, NSTextFieldDelegate, NSDraggingSource {
             startEditing()
         } else {
             dragStartPoint = convert(event.locationInWindow, from: nil)
-            // Select on mouseUp so the view isn't destroyed before mouseDragged fires
+            // Switch terminal immediately so the action isn't lost
+            // if a tab bar rebuild destroys this view before mouseUp.
+            (target as? DeckardWindowController)?.switchToTab(at: index)
         }
     }
 
     override func mouseUp(with event: NSEvent) {
         guard dragStartPoint != nil else { return }
         dragStartPoint = nil
-        _ = target?.perform(clickAction, with: self)
+        // Rebuild the tab bar to update the visual selection state.
+        (target as? DeckardWindowController)?.rebuildTabBar()
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -1875,7 +1913,7 @@ class AddTabButton: NSView {
         self.rightClickAction = rightClickAction
         label = NSTextField(labelWithString: "  +")
         label.font = .systemFont(ofSize: 12, weight: .medium)
-        label.textColor = ThemeColors.default.secondaryText
+        label.textColor = ThemeManager.shared.currentColors.secondaryText
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         toolTip = shortcutTooltip("New Claude tab", for: .newClaudeTab)
@@ -1915,7 +1953,7 @@ class ReorderableStackView: NSStackView {
     private let dropIndicator: NSView = {
         let v = NSView()
         v.wantsLayer = true
-        v.layer?.backgroundColor = ThemeColors.default.foreground.withAlphaComponent(0.4).cgColor
+        v.layer?.backgroundColor = ThemeManager.shared.currentColors.foreground.withAlphaComponent(0.4).cgColor
         v.isHidden = true
         return v
     }()
@@ -2006,7 +2044,7 @@ class ReorderableHStackView: NSStackView {
     private let dropIndicator: NSView = {
         let v = NSView()
         v.wantsLayer = true
-        v.layer?.backgroundColor = ThemeColors.default.foreground.withAlphaComponent(0.4).cgColor
+        v.layer?.backgroundColor = ThemeManager.shared.currentColors.foreground.withAlphaComponent(0.4).cgColor
         v.isHidden = true
         return v
     }()

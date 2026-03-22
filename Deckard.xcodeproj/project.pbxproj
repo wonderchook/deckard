@@ -26,6 +26,8 @@
 		AABB0004AABB0004AABB0004 /* ShortcutNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABB0005AABB0005AABB0005 /* ShortcutNames.swift */; };
 		AABB0006AABB0006AABB0006 /* DeckardHooksInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABB0007AABB0007AABB0007 /* DeckardHooksInstaller.swift */; };
 		CC110001CC110001CC110001 /* ThemeColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC110002CC110002CC110002 /* ThemeColors.swift */; };
+		TM000001TM000001TM000001 /* ThemeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = TM000002TM000002TM000002 /* ThemeManager.swift */; };
+		TC000001TC000001TC000001 /* TerminalColorScheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = TC000002TC000002TC000002 /* TerminalColorScheme.swift */; };
 		DD220001DD220001DD220001 /* ProcessMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD220002DD220002DD220002 /* ProcessMonitor.swift */; };
 		DD330001DD330001DD330001 /* DiagnosticLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD330002DD330002DD330002 /* DiagnosticLog.swift */; };
 		DD440001DD440001DD440001 /* CrashReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD440002DD440002DD440002 /* CrashReporter.swift */; };
@@ -50,6 +52,8 @@
 		AABB0005AABB0005AABB0005 /* ShortcutNames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutNames.swift; sourceTree = "<group>"; };
 		AABB0007AABB0007AABB0007 /* DeckardHooksInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeckardHooksInstaller.swift; sourceTree = "<group>"; };
 		CC110002CC110002CC110002 /* ThemeColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeColors.swift; sourceTree = "<group>"; };
+		TM000002TM000002TM000002 /* ThemeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeManager.swift; sourceTree = "<group>"; };
+		TC000002TC000002TC000002 /* TerminalColorScheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalColorScheme.swift; sourceTree = "<group>"; };
 		DD220002DD220002DD220002 /* ProcessMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessMonitor.swift; sourceTree = "<group>"; };
 		DD330002DD330002DD330002 /* DiagnosticLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticLog.swift; sourceTree = "<group>"; };
 		DD440002DD440002DD440002 /* CrashReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashReporter.swift; sourceTree = "<group>"; };
@@ -94,6 +98,7 @@
 			isa = PBXGroup;
 			children = (
 				CC110002CC110002CC110002 /* ThemeColors.swift */,
+				TM000002TM000002TM000002 /* ThemeManager.swift */,
 			);
 			path = Theme;
 			sourceTree = "<group>";
@@ -141,6 +146,7 @@
 		ST000006ST000006ST000006 /* Terminal */ = {
 			isa = PBXGroup;
 			children = (
+				TC000002TC000002TC000002 /* TerminalColorScheme.swift */,
 				ST000005ST000005ST000005 /* TerminalSurface.swift */,
 			);
 			path = Terminal;
@@ -282,6 +288,8 @@
 				AABB0004AABB0004AABB0004 /* ShortcutNames.swift in Sources */,
 				AABB0006AABB0006AABB0006 /* DeckardHooksInstaller.swift in Sources */,
 				CC110001CC110001CC110001 /* ThemeColors.swift in Sources */,
+				TM000001TM000001TM000001 /* ThemeManager.swift in Sources */,
+				TC000001TC000001TC000001 /* TerminalColorScheme.swift in Sources */,
 				DD220001DD220001DD220001 /* ProcessMonitor.swift in Sources */,
 				DD330001DD330001DD330001 /* DiagnosticLog.swift in Sources */,
 				DD440001DD440001DD440001 /* CrashReporter.swift in Sources */,
