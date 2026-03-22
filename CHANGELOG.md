@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0](https://github.com/gi11es/deckard/compare/v0.3.0...v0.4.0) (2026-03-22)
+
+
+### Features
+
+* add dynamic theme support to DeckardWindowController ([4054633](https://github.com/gi11es/deckard/commit/40546330656f8371d239ee68c9c34a04680ddb13))
+* restore theme support with 485 Ghostty-format themes ([cbdbd99](https://github.com/gi11es/deckard/commit/cbdbd996a1d5e40daf606f4f816cd9a5e52b7b8e))
+
+
+### Bug Fixes
+
+* cancel dispatch source before closing client fd to prevent EV_VANISHED crash ([ecb511f](https://github.com/gi11es/deckard/commit/ecb511f357597340e9ad883774507ce01d8f28f4))
+
 ## [0.3.0](https://github.com/gi11es/deckard/compare/v0.2.0...v0.3.0) (2026-03-21)
 
 
