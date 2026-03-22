@@ -26,28 +26,12 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Select Xcode 26
         run: sudo xcode-select -s /Applications/Xcode_26.2.app
 
-      - name: Install Zig
-        uses: mlugg/setup-zig@v2
-        with:
-          version: 0.15.2
-
-      - name: Cache GhosttyKit xcframework
-        id: cache-ghostty
-        uses: actions/cache@v4
-        with:
-          path: ghostty/macos/GhosttyKit.xcframework
-          key: ghosttykit-${{ hashFiles('.gitmodules', 'ghostty') }}
-
-      - name: Build GhosttyKit
-        if: steps.cache-ghostty.outputs.cache-hit != 'true'
-        working-directory: ghostty
-        run: zig build -Demit-xcframework -Demit-macos-app=false -Dxcframework-target=native -Doptimize=ReleaseFast
+      - name: Resolve SPM dependencies
+        run: xcodebuild -resolvePackageDependencies -project Deckard.xcodeproj
 
       - name: Build Deckard
         run: |
