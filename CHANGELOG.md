@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.5.0](https://github.com/gi11es/deckard/compare/v0.4.0...v0.5.0) (2026-03-23)
+
+
+### Features
+
+* add font picker with preview to Settings, widen settings window ([f481bcd](https://github.com/gi11es/deckard/commit/f481bcdecb1e2358da9ec5759113dea1b1c129f0))
+* enable SwiftTerm Metal GPU renderer ([8b5d557](https://github.com/gi11es/deckard/commit/8b5d5571afa8872588abb59fedae630da2c471dc))
+* replace theme picker table with 3-column grid of preview cards ([55f7b51](https://github.com/gi11es/deckard/commit/55f7b510e8a95fd4799f98cc0babb56dda250195))
+
+
+### Bug Fixes
+
+* add health check and auto-restart for control socket ([d015e15](https://github.com/gi11es/deckard/commit/d015e151dbc567d4a076b47879c4d85136b63acf))
+* theme card previews now render colored terminal text ([e66911d](https://github.com/gi11es/deckard/commit/e66911d0b2a6eac4372ce89b876751adb94bfb36))
+* use serial queue for control socket to prevent concurrent dictionary access ([32c5415](https://github.com/gi11es/deckard/commit/32c541540b13dcee482360a22d9e1a7526d68c4b))
+
 ## [0.4.0](https://github.com/gi11es/deckard/compare/v0.3.0...v0.4.0) (2026-03-22)
 
 
