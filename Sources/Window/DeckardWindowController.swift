@@ -725,6 +725,7 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         DispatchQueue.global(qos: .utility).async {
             let usage = ContextMonitor.shared.getUsage(sessionId: sessionId, projectPath: projectPath)
             DispatchQueue.main.async { [weak self] in
+                guard let usage = usage else { return }
                 self?.applyContextUsage(usage)
             }
         }
