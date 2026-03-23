@@ -110,12 +110,18 @@ class TerminalSurface: NSObject, LocalProcessTerminalViewDelegate {
             let tmux = tmuxPath
             let session = sessionName
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.3) {
-                let task = Process()
-                task.executableURL = URL(fileURLWithPath: tmux)
-                task.arguments = ["set-option", "-t", session, "status", "off"]
-                task.standardOutput = FileHandle.nullDevice
-                task.standardError = FileHandle.nullDevice
-                try? task.run()
+                for args in [
+                    ["set-option", "-t", session, "status", "off"],
+                    ["set-option", "-t", session, "-g", "mouse", "on"],
+                ] {
+                    let task = Process()
+                    task.executableURL = URL(fileURLWithPath: tmux)
+                    task.arguments = args
+                    task.standardOutput = FileHandle.nullDevice
+                    task.standardError = FileHandle.nullDevice
+                    try? task.run()
+                    task.waitUntilExit()
+                }
             }
         } else {
             self.tmuxSessionName = nil
