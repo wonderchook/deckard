@@ -167,12 +167,20 @@ class TerminalSurface: NSObject, LocalProcessTerminalViewDelegate {
             let tmux = tmuxPath
             let session = sessionName
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.3) {
-                for args in [
+                let commands: [[String]] = [
                     ["set-option", "-t", session, "status", "off"],
                     ["set-option", "-t", session, "-g", "mouse", "on"],
                     ["set-option", "-t", session, "-g", "default-terminal", "xterm-256color"],
                     ["set-option", "-t", session, "-g", "allow-passthrough", "on"],
-                ] {
+                    // Use OSC 52 to copy to system clipboard
+                    ["set-option", "-t", session, "-s", "set-clipboard", "on"],
+                    // When mouse drag ends in copy mode, copy selection to clipboard and exit
+                    ["bind-key", "-T", "copy-mode", "MouseDragEnd1Pane",
+                     "send-keys", "-X", "copy-pipe-and-cancel", "pbcopy"],
+                    ["bind-key", "-T", "copy-mode-vi", "MouseDragEnd1Pane",
+                     "send-keys", "-X", "copy-pipe-and-cancel", "pbcopy"],
+                ]
+                for args in commands {
                     let task = Process()
                     task.executableURL = URL(fileURLWithPath: tmux)
                     task.arguments = args
