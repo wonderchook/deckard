@@ -51,6 +51,7 @@
 		AA1C0001AA1C0001AA1C0001 /* DeckardHooksInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1C0002AA1C0002AA1C0002 /* DeckardHooksInstallerTests.swift */; };
 		AA1D0001AA1D0001AA1D0001 /* CrashReporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1D0002AA1D0002AA1D0002 /* CrashReporterTests.swift */; };
 		AA1E0001AA1E0001AA1E0001 /* ControlSocketTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1E0002AA1E0002AA1E0002 /* ControlSocketTests.swift */; };
+		AA1F0001AA1F0001AA1F0001 /* SidebarFolderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1F0002AA1F0002AA1F0002 /* SidebarFolderTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -99,6 +100,7 @@
 		AA1C0002AA1C0002AA1C0002 /* DeckardHooksInstallerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeckardHooksInstallerTests.swift; sourceTree = "<group>"; };
 		AA1D0002AA1D0002AA1D0002 /* CrashReporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashReporterTests.swift; sourceTree = "<group>"; };
 		AA1E0002AA1E0002AA1E0002 /* ControlSocketTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlSocketTests.swift; sourceTree = "<group>"; };
+		AA1F0002AA1F0002AA1F0002 /* SidebarFolderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarFolderTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -239,6 +241,7 @@
 				AA170002AA170002AA170002 /* HookHandlerTests.swift */,
 				AA180002AA180002AA180002 /* ProcessMonitorTests.swift */,
 				AA130002AA130002AA130002 /* SessionStateTests.swift */,
+				AA1F0002AA1F0002AA1F0002 /* SidebarFolderTests.swift */,
 				TE000001TE000001TE000001 /* SmokeTests.swift */,
 				AA120002AA120002AA120002 /* TerminalColorSchemeTests.swift */,
 				AA1A0002AA1A0002AA1A0002 /* TerminalSurfaceTests.swift */,
@@ -415,6 +418,7 @@
 				AA1C0001AA1C0001AA1C0001 /* DeckardHooksInstallerTests.swift in Sources */,
 				AA1D0001AA1D0001AA1D0001 /* CrashReporterTests.swift in Sources */,
 				AA1E0001AA1E0001AA1E0001 /* ControlSocketTests.swift in Sources */,
+				AA1F0001AA1F0001AA1F0001 /* SidebarFolderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
