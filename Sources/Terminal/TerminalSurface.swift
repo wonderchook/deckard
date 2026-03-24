@@ -165,6 +165,8 @@ class TerminalSurface: NSObject, LocalProcessTerminalViewDelegate {
                 for args in [
                     ["set-option", "-t", session, "status", "off"],
                     ["set-option", "-t", session, "-g", "mouse", "on"],
+                    ["set-option", "-t", session, "-g", "default-terminal", "xterm-256color"],
+                    ["set-option", "-t", session, "-g", "allow-passthrough", "on"],
                 ] {
                     let task = Process()
                     task.executableURL = URL(fileURLWithPath: tmux)
