@@ -174,11 +174,13 @@ class TerminalSurface: NSObject, LocalProcessTerminalViewDelegate {
                     ["set-option", "-t", session, "-g", "allow-passthrough", "on"],
                     // Use OSC 52 to copy to system clipboard
                     ["set-option", "-t", session, "-s", "set-clipboard", "on"],
-                    // When mouse drag ends in copy mode, copy selection to clipboard and exit
+                    // Mouse drag end: copy to clipboard but KEEP selection visible
+                    // (copy-pipe without -and-cancel). User sees the highlight and
+                    // can Cmd+C or click elsewhere to dismiss.
                     ["bind-key", "-T", "copy-mode", "MouseDragEnd1Pane",
-                     "send-keys", "-X", "copy-pipe-and-cancel", "pbcopy"],
+                     "send-keys", "-X", "copy-pipe", "pbcopy"],
                     ["bind-key", "-T", "copy-mode-vi", "MouseDragEnd1Pane",
-                     "send-keys", "-X", "copy-pipe-and-cancel", "pbcopy"],
+                     "send-keys", "-X", "copy-pipe", "pbcopy"],
                 ]
                 for args in commands {
                     let task = Process()
