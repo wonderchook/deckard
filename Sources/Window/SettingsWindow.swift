@@ -1,7 +1,7 @@
 import AppKit
 import KeyboardShortcuts
 
-class SettingsWindowController: NSWindowController, NSToolbarDelegate, NSTextViewDelegate {
+class SettingsWindowController: NSWindowController, NSToolbarDelegate {
     static let shared = SettingsWindowController()
 
     private enum Pane: String, CaseIterable {
@@ -187,7 +187,7 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate, NSTextVie
     private var fontSizeStepper: NSStepper?
     private var fontPreviewLabel: NSTextField?
     private var scrollbackField: NSTextField?
-    private var tmuxOptionsTextView: NSTextView?
+    private var tmuxOptionsField: NSTextField?
 
     /// A flipped NSView so card layout starts from the top.
     private class FlippedCardContainer: NSView {
@@ -478,24 +478,21 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate, NSTextVie
 
         let savedOptions = UserDefaults.standard.string(forKey: "tmuxOptions")
             ?? TerminalSurface.defaultTmuxOptions
-        let tmuxTextView = NSTextView()
-        tmuxTextView.string = savedOptions
-        tmuxTextView.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-        tmuxTextView.isEditable = true
-        tmuxTextView.isRichText = false
-        tmuxTextView.allowsUndo = true
-        tmuxTextView.delegate = self
-        tmuxTextView.isAutomaticQuoteSubstitutionEnabled = false
-        tmuxTextView.isAutomaticDashSubstitutionEnabled = false
-        tmuxTextView.isAutomaticTextReplacementEnabled = false
-        self.tmuxOptionsTextView = tmuxTextView
-
-        let tmuxScrollView = NSScrollView()
-        tmuxScrollView.documentView = tmuxTextView
-        tmuxScrollView.hasVerticalScroller = true
-        tmuxScrollView.translatesAutoresizingMaskIntoConstraints = false
-        tmuxScrollView.borderType = .bezelBorder
-        pane.addSubview(tmuxScrollView)
+        let tmuxField = NSTextField()
+        tmuxField.stringValue = savedOptions
+        tmuxField.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        tmuxField.isEditable = true
+        tmuxField.isBordered = true
+        tmuxField.bezelStyle = .roundedBezel
+        tmuxField.maximumNumberOfLines = 0
+        tmuxField.cell?.wraps = true
+        tmuxField.cell?.isScrollable = false
+        tmuxField.usesSingleLineMode = false
+        tmuxField.translatesAutoresizingMaskIntoConstraints = false
+        tmuxField.target = self
+        tmuxField.action = #selector(tmuxOptionsFieldChanged(_:))
+        self.tmuxOptionsField = tmuxField
+        pane.addSubview(tmuxField)
 
         let tmuxHelpLabel = NSTextField(labelWithString: "One tmux command per line (set, bind-key, etc.). Lines starting with # are comments. Applied to each new session.")
         tmuxHelpLabel.font = .systemFont(ofSize: 11)
@@ -556,14 +553,12 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate, NSTextVie
             tmuxOptionsLabel.topAnchor.constraint(equalTo: tmuxCheckbox.bottomAnchor, constant: 12),
             tmuxOptionsLabel.leadingAnchor.constraint(equalTo: pane.leadingAnchor, constant: 20),
 
-            tmuxScrollView.topAnchor.constraint(equalTo: tmuxOptionsLabel.bottomAnchor, constant: 4),
-            tmuxScrollView.leadingAnchor.constraint(equalTo: pane.leadingAnchor, constant: 20),
-            tmuxScrollView.trailingAnchor.constraint(equalTo: pane.trailingAnchor, constant: -20),
-            tmuxScrollView.heightAnchor.constraint(equalToConstant: 80),
+            tmuxField.topAnchor.constraint(equalTo: tmuxOptionsLabel.bottomAnchor, constant: 4),
+            tmuxField.leadingAnchor.constraint(equalTo: pane.leadingAnchor, constant: 20),
+            tmuxField.trailingAnchor.constraint(equalTo: pane.trailingAnchor, constant: -20),
+            tmuxField.heightAnchor.constraint(equalToConstant: 80),
 
-            tmuxTextView.widthAnchor.constraint(equalTo: tmuxScrollView.contentView.widthAnchor),
-
-            tmuxHelpLabel.topAnchor.constraint(equalTo: tmuxScrollView.bottomAnchor, constant: 4),
+            tmuxHelpLabel.topAnchor.constraint(equalTo: tmuxField.bottomAnchor, constant: 4),
             tmuxHelpLabel.leadingAnchor.constraint(equalTo: pane.leadingAnchor, constant: 20),
             tmuxHelpLabel.trailingAnchor.constraint(equalTo: pane.trailingAnchor, constant: -20),
 
@@ -613,14 +608,12 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate, NSTextVie
     }
 
     @objc private func resetTmuxOptions() {
-        tmuxOptionsTextView?.string = TerminalSurface.defaultTmuxOptions
+        tmuxOptionsField?.stringValue = TerminalSurface.defaultTmuxOptions
         UserDefaults.standard.removeObject(forKey: "tmuxOptions")
     }
 
-    func textDidChange(_ notification: Notification) {
-        guard let textView = notification.object as? NSTextView,
-              textView === tmuxOptionsTextView else { return }
-        UserDefaults.standard.set(textView.string, forKey: "tmuxOptions")
+    @objc private func tmuxOptionsFieldChanged(_ sender: NSTextField) {
+        UserDefaults.standard.set(sender.stringValue, forKey: "tmuxOptions")
     }
 
     // MARK: - Scrollback Settings
