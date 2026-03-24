@@ -177,27 +177,21 @@ class TerminalSurface: NSObject, LocalProcessTerminalViewDelegate {
                 currentDirectory: workingDirectory
             )
 
-            // Hide the tmux status bar after attaching. The -f config only
-            // applies on server start; this covers reattach to existing servers.
+            // Minimal tmux configuration:
+            // - Hide status bar (Deckard has its own tab UI)
+            // - Enable mouse (click panes, scroll, select text)
+            // - UTF-8 terminal for emoji/wide chars
+            // - Passthrough for escape sequences
+            // Everything else (selection, clipboard, scrolling) uses tmux defaults.
             let tmux = tmuxPath
             let session = sessionName
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.3) {
-                let commands: [[String]] = [
+                for args: [String] in [
                     ["set-option", "-t", session, "status", "off"],
                     ["set-option", "-t", session, "-g", "mouse", "on"],
                     ["set-option", "-t", session, "-g", "default-terminal", "xterm-256color"],
                     ["set-option", "-t", session, "-g", "allow-passthrough", "on"],
-                    // Use OSC 52 to copy to system clipboard
-                    ["set-option", "-t", session, "-s", "set-clipboard", "on"],
-                    // Mouse drag end: copy to clipboard but KEEP selection visible.
-                    // copy-pipe-no-clear copies without clearing the highlight.
-                    // User sees the selection, can Cmd+C or click to dismiss.
-                    ["bind-key", "-T", "copy-mode", "MouseDragEnd1Pane",
-                     "send-keys", "-X", "copy-pipe-no-clear", "pbcopy"],
-                    ["bind-key", "-T", "copy-mode-vi", "MouseDragEnd1Pane",
-                     "send-keys", "-X", "copy-pipe-no-clear", "pbcopy"],
-                ]
-                for args in commands {
+                ] {
                     let task = Process()
                     task.executableURL = URL(fileURLWithPath: tmux)
                     task.arguments = args
