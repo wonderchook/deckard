@@ -298,12 +298,9 @@ extension DeckardWindowController {
 
         let toInfo = infos[toRow]
 
-        // Dropping onto a folder header → insert into folder
-        if toInfo.isFolder, let folderId = toInfo.folderId,
-           let folder = sidebarFolders.first(where: { $0.id == folderId }) {
-            moveProjectIntoFolder(projectId: draggedProject.id, folder: folder)
-            return
-        }
+        // Note: dropping directly *onto* a folder header (with highlight) is
+        // handled separately via onDropOntoFolder in performDragOperation.
+        // Here we only handle line-indicator (between-items) drops.
 
         // Determine the target folder: either the row itself is a folder child,
         // or the row above is (dropping after the last child in a folder).
