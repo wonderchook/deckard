@@ -1,7 +1,7 @@
 import AppKit
 import KeyboardShortcuts
 
-class SettingsWindowController: NSWindowController, NSToolbarDelegate {
+class SettingsWindowController: NSWindowController, NSToolbarDelegate, NSTextFieldDelegate, NSWindowDelegate {
     static let shared = SettingsWindowController()
 
     private enum Pane: String, CaseIterable {
@@ -38,6 +38,7 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         window.center()
 
         super.init(window: window)
+        window.delegate = self
 
         let toolbar = NSToolbar(identifier: "SettingsToolbar")
         toolbar.delegate = self
@@ -119,9 +120,10 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate {
 
         let extraArgsField = NSTextField()
         extraArgsField.stringValue = UserDefaults.standard.string(forKey: "claudeExtraArgs") ?? ""
-        extraArgsField.placeholderString = "--dangerously-skip-permissions"
+        extraArgsField.placeholderString = "--permission-mode auto"
         extraArgsField.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         objc_setAssociatedObject(extraArgsField, &settingsKeyAssoc, "claudeExtraArgs", .OBJC_ASSOCIATION_RETAIN)
+        extraArgsField.delegate = self
         extraArgsField.target = self
         extraArgsField.action = #selector(textFieldChanged(_:))
 
@@ -147,6 +149,7 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate {
         tabConfigField.placeholderString = "claude, terminal"
         tabConfigField.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         objc_setAssociatedObject(tabConfigField, &settingsKeyAssoc, "defaultTabConfig", .OBJC_ASSOCIATION_RETAIN)
+        tabConfigField.delegate = self
         tabConfigField.target = self
         tabConfigField.action = #selector(textFieldChanged(_:))
 
@@ -994,6 +997,15 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate {
     @objc private func textFieldChanged(_ sender: NSTextField) {
         guard let key = objc_getAssociatedObject(sender, &settingsKeyAssoc) as? String else { return }
         UserDefaults.standard.set(sender.stringValue, forKey: key)
+    }
+
+    func controlTextDidEndEditing(_ obj: Notification) {
+        guard let sender = obj.object as? NSTextField else { return }
+        textFieldChanged(sender)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        window?.makeFirstResponder(nil)
     }
 
     func show() {
