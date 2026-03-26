@@ -285,8 +285,13 @@ class TerminalSurface: NSObject, LocalProcessTerminalViewDelegate {
     static let defaultTmuxOptions = """
     set -g status off
     set -g mouse on
-    set -g default-terminal xterm-256color
+    set -g default-terminal tmux-256color
     set -g allow-passthrough on
+    set -s escape-time 0
+    set -g focus-events on
+    set -g history-limit 50000
+    set -s set-clipboard on
+    set -s extended-keys on
     bind-key -T copy-mode MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel pbcopy
     bind-key -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel pbcopy
     """
