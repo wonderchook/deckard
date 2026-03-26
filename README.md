@@ -18,7 +18,7 @@ Run multiple sessions side by side in a single window with tabs, projects, and s
   </a>
 </p>
 
-![Deckard screenshot](screenshot.jpg)
+![Deckard screenshot](screenshot.png)
 
 ## Features
 
