@@ -246,7 +246,7 @@ class VerticalTabRowView: NSView, NSTextFieldDelegate, NSDraggingSource {
 /// A folder header row in the sidebar with disclosure triangle and name.
 class SidebarFolderView: NSView, NSTextFieldDelegate, NSDraggingSource {
     let folder: SidebarFolder
-    private let disclosureButton: NSButton
+    private let disclosureImageView: NSImageView
     private let label: NSTextField
     private let badgeContainer: NSStackView
 
@@ -278,13 +278,11 @@ class SidebarFolderView: NSView, NSTextFieldDelegate, NSDraggingSource {
     init(folder: SidebarFolder, projectCount: Int) {
         self.folder = folder
 
-        disclosureButton = NSButton()
-        disclosureButton.isBordered = false
-        disclosureButton.title = ""
-        disclosureButton.image = NSImage(systemSymbolName: folder.isCollapsed ? "chevron.right" : "chevron.down",
-                                         accessibilityDescription: "Toggle folder")
-        disclosureButton.contentTintColor = ThemeManager.shared.currentColors.secondaryText
-        disclosureButton.imagePosition = .imageOnly
+        disclosureImageView = NSImageView()
+        disclosureImageView.image = NSImage(systemSymbolName: folder.isCollapsed ? "chevron.right" : "chevron.down",
+                                            accessibilityDescription: "Toggle folder")
+        disclosureImageView.contentTintColor = ThemeManager.shared.currentColors.secondaryText
+        disclosureImageView.imageAlignment = .alignCenter
 
         label = NSTextField(labelWithString: folder.name)
         label.font = .systemFont(ofSize: 11, weight: .semibold)
@@ -301,10 +299,8 @@ class SidebarFolderView: NSView, NSTextFieldDelegate, NSDraggingSource {
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
 
-        disclosureButton.translatesAutoresizingMaskIntoConstraints = false
-        disclosureButton.target = self
-        disclosureButton.action = #selector(disclosureClicked(_:))
-        addSubview(disclosureButton)
+        disclosureImageView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(disclosureImageView)
 
         label.translatesAutoresizingMaskIntoConstraints = false
         addSubview(label)
@@ -314,11 +310,11 @@ class SidebarFolderView: NSView, NSTextFieldDelegate, NSDraggingSource {
 
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: 28),
-            disclosureButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
-            disclosureButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            disclosureButton.widthAnchor.constraint(equalToConstant: 24),
-            disclosureButton.heightAnchor.constraint(equalToConstant: 24),
-            label.leadingAnchor.constraint(equalTo: disclosureButton.trailingAnchor, constant: 0),
+            disclosureImageView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
+            disclosureImageView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            disclosureImageView.widthAnchor.constraint(equalToConstant: 24),
+            disclosureImageView.heightAnchor.constraint(equalToConstant: 24),
+            label.leadingAnchor.constraint(equalTo: disclosureImageView.trailingAnchor, constant: 0),
             label.centerYAnchor.constraint(equalTo: centerYAnchor),
             label.trailingAnchor.constraint(lessThanOrEqualTo: badgeContainer.leadingAnchor, constant: -4),
             badgeContainer.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
@@ -328,6 +324,13 @@ class SidebarFolderView: NSView, NSTextFieldDelegate, NSDraggingSource {
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        // While editing the folder name, let the field editor handle events normally.
+        // Otherwise, always route clicks to self so subviews (image, label) don't swallow them.
+        if isEditingName { return super.hitTest(point) }
+        return frame.contains(point) ? self : nil
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         if isDropTarget {
@@ -339,26 +342,27 @@ class SidebarFolderView: NSView, NSTextFieldDelegate, NSDraggingSource {
         }
     }
 
-    @objc private func disclosureClicked(_ sender: NSButton) {
-        onToggle?(self)
-    }
-
     func updateChevron() {
-        disclosureButton.image = NSImage(systemSymbolName: folder.isCollapsed ? "chevron.right" : "chevron.down",
-                                         accessibilityDescription: "Toggle folder")
+        disclosureImageView.image = NSImage(systemSymbolName: folder.isCollapsed ? "chevron.right" : "chevron.down",
+                                            accessibilityDescription: "Toggle folder")
     }
 
     override func mouseDown(with event: NSEvent) {
-        if event.clickCount == 2 {
+        let localPoint = convert(event.locationInWindow, from: nil)
+        if localPoint.x <= 26 {
+            // Chevron area — always toggle, even on rapid clicks.
+            // Don't set dragStartPoint so mouseUp won't double-toggle.
+            onToggle?(self)
+        } else if event.clickCount == 2 {
             startEditing()
         } else {
-            dragStartPoint = convert(event.locationInWindow, from: nil)
+            dragStartPoint = localPoint
             didDrag = false
         }
     }
 
     override func mouseUp(with event: NSEvent) {
-        // Only toggle collapse if we didn't initiate a drag
+        // Toggle on mouseUp for non-chevron clicks (supports drag detection)
         if !didDrag && dragStartPoint != nil {
             onToggle?(self)
         }
