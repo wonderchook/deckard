@@ -24,10 +24,14 @@ Run multiple sessions side by side in a single window with tabs, projects, and s
 
 - **Multi-tab sessions**: Open multiple Claude Code (and plain terminal) tabs per project. Switch between them with Cmd+1–9 or drag to reorder.
 - **Project sidebar**: Each open directory gets its own set of tabs, persisted across restarts. Group related projects into collapsible sidebar folders for organization (e.g., by client).
-- **Context usage tracking**: A progress bar shows how much of Claude's context window the active session has consumed.
-- **Session state detection**: Tab badges show whether Claude is thinking, waiting for input, needs tool permission, or has errored. Terminal tabs show CPU/disk activity.
+- **Context & quota tracking**: A progress bar shows context window usage. A sparkline visualizes token rate over time, and rate limit indicators show 5-hour and 7-day quota consumption.
+- **Session state detection**: Tab badges show whether Claude is thinking, waiting for input, needs tool permission, or has errored. Terminal tabs show real-time CPU and disk activity for the foreground process.
 - **Session persistence**: Claude sessions resume via `--resume`. Tab structure and working directories are preserved across restarts.
-- **tmux integration**: When tmux is installed, terminal tabs are transparently wrapped in tmux sessions. Quit and relaunch Deckard to resume exactly where you left off — full shell state, scrollback, running processes, and environment preserved. Works as a progressive enhancement; no tmux required.
+- **486 color themes**: Ships with 486 built-in themes (Ghostty format) and loads custom themes from `~/.config/ghostty/themes`. Search and preview in Settings.
+- **Customizable shortcuts**: All keyboard shortcuts are rebindable in Settings > Shortcuts.
+- **tmux integration**: When tmux is installed, terminal tabs are transparently wrapped in tmux sessions. Quit and relaunch Deckard to resume exactly where you left off — full shell state, scrollback, running processes, and environment preserved. tmux options are editable in Settings > Terminal. Works as a progressive enhancement; no tmux required.
+- **Drag and drop**: Drag files from Finder into the terminal — paths are automatically shell-escaped and inserted.
+- **Auto-updates**: Built-in update checking via [Sparkle](https://sparkle-project.org/). New releases are delivered automatically.
 - **Terminal rendering**: Powered by [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm), a self-contained terminal emulator with VT100/xterm emulation, IME support, and mouse reporting.
 
 ## Install
