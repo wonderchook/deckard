@@ -14,7 +14,7 @@ Run multiple sessions side by side in a single window with tabs, projects, and s
   </a>
   <img alt="Platform" src="https://img.shields.io/badge/macOS_14+-grey?style=flat-square">
   <a href="https://github.com/gi11es/deckard/releases">
-    <img alt="Downloads" src="https://img.shields.io/github/downloads/gi11es/deckard/total?style=flat-square&label=downloads&color=brightgreen">
+    <img alt="Downloads" src="https://img.shields.io/github/downloads/gi11es/deckard/Deckard.dmg/total?style=flat-square&label=downloads&color=brightgreen">
   </a>
 </p>
 
@@ -29,6 +29,16 @@ Run multiple sessions side by side in a single window with tabs, projects, and s
 - **Session persistence**: Claude sessions resume via `--resume`. Tab structure and working directories are preserved across restarts.
 - **tmux integration**: When tmux is installed, terminal tabs are transparently wrapped in tmux sessions. Quit and relaunch Deckard to resume exactly where you left off — full shell state, scrollback, running processes, and environment preserved. Works as a progressive enhancement; no tmux required.
 - **Terminal rendering**: Powered by [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm), a self-contained terminal emulator with VT100/xterm emulation, IME support, and mouse reporting.
+
+## Install
+
+**Homebrew:**
+
+```bash
+brew install gi11es/tap/deckard
+```
+
+**Manual download:** grab the latest [DMG from Releases](https://github.com/gi11es/deckard/releases/latest/download/Deckard.dmg).
 
 ## Requirements
 
