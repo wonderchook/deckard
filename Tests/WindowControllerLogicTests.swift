@@ -56,6 +56,60 @@ final class WindowControllerLogicTests: XCTestCase {
         XCTAssertEqual(project.name, "deep-folder")
     }
 
+    // MARK: - ProjectItem symlink resolution
+
+    func testProjectItemResolvesSymlinks() throws {
+        let tempDir = NSTemporaryDirectory() + "deckard-symlink-\(UUID().uuidString)"
+        let realDir = tempDir + "/real-project"
+        let linkDir = tempDir + "/linked-project"
+        try FileManager.default.createDirectory(atPath: realDir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(atPath: tempDir) }
+        try FileManager.default.createSymbolicLink(atPath: linkDir, withDestinationPath: realDir)
+
+        let project = ProjectItem(path: linkDir)
+        XCTAssertEqual(project.path, realDir, "ProjectItem should resolve symlinks to canonical path")
+        XCTAssertEqual(project.name, "real-project")
+    }
+
+    func testProjectItemCanonicalPathIsIdempotent() throws {
+        let tempDir = NSTemporaryDirectory() + "deckard-symlink-\(UUID().uuidString)"
+        let realDir = tempDir + "/real-project"
+        try FileManager.default.createDirectory(atPath: realDir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(atPath: tempDir) }
+
+        // A non-symlink path should be unchanged
+        let project = ProjectItem(path: realDir)
+        XCTAssertEqual(project.path, realDir)
+    }
+
+    func testProjectItemViaSymlinkMatchesCanonical() throws {
+        let tempDir = NSTemporaryDirectory() + "deckard-symlink-\(UUID().uuidString)"
+        let realDir = tempDir + "/real-project"
+        let linkDir = tempDir + "/linked-project"
+        try FileManager.default.createDirectory(atPath: realDir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(atPath: tempDir) }
+        try FileManager.default.createSymbolicLink(atPath: linkDir, withDestinationPath: realDir)
+
+        let fromSymlink = ProjectItem(path: linkDir)
+        let fromCanonical = ProjectItem(path: realDir)
+        XCTAssertEqual(fromSymlink.path, fromCanonical.path,
+                       "ProjectItems opened via symlink and canonical path should have the same path")
+    }
+
+    func testProjectItemChainedSymlinks() throws {
+        let tempDir = NSTemporaryDirectory() + "deckard-symlink-\(UUID().uuidString)"
+        let realDir = tempDir + "/real-project"
+        let link1 = tempDir + "/link1"
+        let link2 = tempDir + "/link2"
+        try FileManager.default.createDirectory(atPath: realDir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(atPath: tempDir) }
+        try FileManager.default.createSymbolicLink(atPath: link1, withDestinationPath: realDir)
+        try FileManager.default.createSymbolicLink(atPath: link2, withDestinationPath: link1)
+
+        let project = ProjectItem(path: link2)
+        XCTAssertEqual(project.path, realDir, "Chained symlinks should fully resolve")
+    }
+
     // MARK: - DefaultTabConfig
 
     func testDefaultTabConfigParsesDefaults() {

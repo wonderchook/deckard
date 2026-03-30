@@ -162,4 +162,98 @@ final class SessionStateTests: XCTestCase {
         XCTAssertNil(state.tabs)
         XCTAssertNil(state.projects)
     }
+
+    // MARK: - Symlink path restoration
+
+    func testProjectStatePathSurvivesRoundtripViaProjectItem() throws {
+        // Simulate: save state with canonical path, restore via ProjectItem
+        let tempDir = NSTemporaryDirectory() + "deckard-state-\(UUID().uuidString)"
+        let realDir = tempDir + "/real-project"
+        let linkDir = tempDir + "/linked-project"
+        try FileManager.default.createDirectory(atPath: realDir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(atPath: tempDir) }
+        try FileManager.default.createSymbolicLink(atPath: linkDir, withDestinationPath: realDir)
+
+        // Save state using symlink path (as old Deckard would)
+        var state = DeckardState()
+        state.projects = [
+            ProjectState(id: "p1", path: linkDir, name: "linked-project",
+                         selectedTabIndex: 0, tabs: [
+                ProjectTabState(id: "t1", name: "Claude", isClaude: true, sessionId: "sess-1")
+            ])
+        ]
+
+        // Round-trip through JSON (simulates state.json persistence)
+        let data = try JSONEncoder().encode(state)
+        let restored = try JSONDecoder().decode(DeckardState.self, from: data)
+
+        // Simulate restoreOrCreateInitial: ProjectItem resolves the path
+        let ps = restored.projects![0]
+        let project = ProjectItem(path: ps.path)
+
+        // The resolved path should match the canonical path
+        XCTAssertEqual(project.path, realDir,
+                       "ProjectItem should resolve symlink from old state.json")
+
+        // Sidebar folder restoration resolves ps.path before comparison
+        let resolvedPsPath = (ps.path as NSString).resolvingSymlinksInPath
+        XCTAssertEqual(project.path, resolvedPsPath,
+                       "Resolved ps.path should match ProjectItem.path for sidebar folder mapping")
+    }
+
+    func testProjectStateSavedWithCanonicalPath() throws {
+        // When captureState() saves a project that was opened via symlink,
+        // the path should be canonical (because ProjectItem.init resolves)
+        let tempDir = NSTemporaryDirectory() + "deckard-state-\(UUID().uuidString)"
+        let realDir = tempDir + "/real-project"
+        let linkDir = tempDir + "/linked-project"
+        try FileManager.default.createDirectory(atPath: realDir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(atPath: tempDir) }
+        try FileManager.default.createSymbolicLink(atPath: linkDir, withDestinationPath: realDir)
+
+        let project = ProjectItem(path: linkDir)
+        // Simulate what captureState() does
+        let saved = ProjectState(
+            id: project.id.uuidString,
+            path: project.path,
+            name: project.name,
+            selectedTabIndex: 0,
+            tabs: []
+        )
+
+        XCTAssertEqual(saved.path, realDir,
+                       "Saved ProjectState should contain canonical path, not symlink")
+    }
+
+    func testOldAndNewStatePathsMatchAfterResolution() throws {
+        // Simulate migration: old state has symlink path, new code resolves it
+        let tempDir = NSTemporaryDirectory() + "deckard-state-\(UUID().uuidString)"
+        let realDir = tempDir + "/real-project"
+        let linkDir = tempDir + "/linked-project"
+        try FileManager.default.createDirectory(atPath: realDir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(atPath: tempDir) }
+        try FileManager.default.createSymbolicLink(atPath: linkDir, withDestinationPath: realDir)
+
+        // Old state (saved with symlink path)
+        let oldProjectState = ProjectState(
+            id: "p1", path: linkDir, name: "linked-project",
+            selectedTabIndex: 0, tabs: []
+        )
+
+        // New ProjectItem (opened via symlink, but path is resolved)
+        let project = ProjectItem(path: linkDir)
+
+        // restoreSidebarFolders resolves ps.path before comparison
+        let resolvedOldPath = (oldProjectState.path as NSString).resolvingSymlinksInPath
+        XCTAssertEqual(project.path, resolvedOldPath,
+                       "Migration: resolved old state path must match new ProjectItem.path")
+
+        // New state (saved after fix) already has canonical path
+        let newProjectState = ProjectState(
+            id: "p2", path: project.path, name: project.name,
+            selectedTabIndex: 0, tabs: []
+        )
+        XCTAssertEqual(project.path, newProjectState.path,
+                       "Post-fix: saved path is already canonical, direct comparison works")
+    }
 }

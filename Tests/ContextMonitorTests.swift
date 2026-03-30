@@ -150,4 +150,52 @@ final class ContextMonitorTests: XCTestCase {
         XCTAssertEqual(info.modificationDate, date)
         XCTAssertEqual(info.firstUserMessage, "Hello Claude")
     }
+
+    // MARK: - claudeProjectDirName symlink resolution
+
+    func testClaudeProjectDirNameResolvesSymlinks() throws {
+        let tempDir = NSTemporaryDirectory() + "deckard-dirname-\(UUID().uuidString)"
+        let realDir = tempDir + "/real-project"
+        let linkDir = tempDir + "/linked-project"
+        try FileManager.default.createDirectory(atPath: realDir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(atPath: tempDir) }
+        try FileManager.default.createSymbolicLink(atPath: linkDir, withDestinationPath: realDir)
+
+        XCTAssertEqual(linkDir.claudeProjectDirName, realDir.claudeProjectDirName,
+                       "claudeProjectDirName should produce the same result for symlink and canonical path")
+    }
+
+    func testClaudeProjectDirNameEncodesSlashes() {
+        let path = "/Users/test/my-project"
+        XCTAssertEqual(path.claudeProjectDirName, "-Users-test-my-project")
+        XCTAssertFalse(path.claudeProjectDirName.contains("/"))
+    }
+
+    func testClaudeProjectDirNameIdempotentOnCanonicalPath() throws {
+        let tempDir = NSTemporaryDirectory() + "deckard-dirname-\(UUID().uuidString)"
+        let realDir = tempDir + "/project"
+        try FileManager.default.createDirectory(atPath: realDir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(atPath: tempDir) }
+
+        // Calling on an already-canonical path should give the same result
+        let dirName = realDir.claudeProjectDirName
+        let resolvedFirst = (realDir as NSString).resolvingSymlinksInPath
+        XCTAssertEqual(resolvedFirst.claudeProjectDirName, dirName,
+                       "Double resolution should be idempotent")
+    }
+
+    func testClaudeProjectDirNameConsistentWithProjectItem() throws {
+        let tempDir = NSTemporaryDirectory() + "deckard-dirname-\(UUID().uuidString)"
+        let realDir = tempDir + "/real-project"
+        let linkDir = tempDir + "/linked-project"
+        try FileManager.default.createDirectory(atPath: realDir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(atPath: tempDir) }
+        try FileManager.default.createSymbolicLink(atPath: linkDir, withDestinationPath: realDir)
+
+        // ProjectItem resolves symlinks; claudeProjectDirName should agree
+        let project = ProjectItem(path: linkDir)
+        let encoded = project.path.claudeProjectDirName
+        XCTAssertEqual(encoded, realDir.claudeProjectDirName,
+                       "ProjectItem.path and claudeProjectDirName should agree on canonical encoding")
+    }
 }

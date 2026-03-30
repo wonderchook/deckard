@@ -53,8 +53,8 @@ class ProjectItem {
 
     init(path: String) {
         self.id = UUID()
-        self.path = path
-        self.name = (path as NSString).lastPathComponent
+        self.path = (path as NSString).resolvingSymlinksInPath
+        self.name = (self.path as NSString).lastPathComponent
     }
 }
 
@@ -445,8 +445,9 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         let project = ProjectItem(path: path)
 
         // Check if we have a recently closed snapshot — restore tabs from it
-        if let snapshot = recentlyClosedProjects.first(where: { $0.path == path }) {
-            recentlyClosedProjects.removeAll { $0.path == path }
+        // Use project.path (symlinks resolved) so symlinked paths match canonical ones.
+        if let snapshot = recentlyClosedProjects.first(where: { $0.path == project.path }) {
+            recentlyClosedProjects.removeAll { $0.path == project.path }
             project.name = snapshot.name
             for ts in snapshot.tabs {
                 createTabInProject(project, isClaude: ts.isClaude, name: ts.name,
@@ -1278,7 +1279,9 @@ class DeckardWindowController: NSWindowController, NSSplitViewDelegate {
         guard let projectStates = state.projects else { return }
         var savedIdToProject: [String: ProjectItem] = [:]
         for ps in projectStates {
-            if let project = projects.first(where: { $0.path == ps.path }) {
+            // Resolve symlinks so old state.json entries (pre-fix) still match.
+            let resolvedPsPath = (ps.path as NSString).resolvingSymlinksInPath
+            if let project = projects.first(where: { $0.path == resolvedPsPath }) {
                 savedIdToProject[ps.id] = project
             }
         }
