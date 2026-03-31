@@ -887,18 +887,20 @@ class BadgeShapeView: NSView {
             return path
 
         case .triangleUp:
-            let path = CGMutablePath()
-            path.move(to: CGPoint(x: cx, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-            path.closeSubpath()
-            return path
-
-        case .triangleDown:
+            // AppKit: y=0 is bottom, so apex at maxY points up on screen
             let path = CGMutablePath()
             path.move(to: CGPoint(x: cx, y: rect.maxY))
             path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
             path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+            path.closeSubpath()
+            return path
+
+        case .triangleDown:
+            // AppKit: y=0 is bottom, so apex at minY points down on screen
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: cx, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
             path.closeSubpath()
             return path
 
@@ -942,20 +944,6 @@ class BadgeShapeView: NSView {
             path.closeSubpath()
             return path
 
-        case .star:
-            let path = CGMutablePath()
-            let outerR = w / 2
-            let innerR = outerR * 0.38
-            for i in 0..<10 {
-                let angle = CGFloat(i) * .pi / 5 - .pi / 2
-                let r = i % 2 == 0 ? outerR : innerR
-                let px = cx + r * cos(angle)
-                let py = cy + r * sin(angle)
-                if i == 0 { path.move(to: CGPoint(x: px, y: py)) }
-                else { path.addLine(to: CGPoint(x: px, y: py)) }
-            }
-            path.closeSubpath()
-            return path
         }
     }
 }

@@ -36,19 +36,18 @@ class TabItem {
     }
 
     enum BadgeShape: String, CaseIterable {
-        case circle, square, diamond, triangleUp, triangleDown, cross, xCross, hexagon, star
+        case circle, square, diamond, triangleUp, triangleDown, cross, xCross, hexagon
 
         var displayName: String {
             switch self {
-            case .circle: return "Circle"
-            case .square: return "Square"
-            case .diamond: return "Diamond"
-            case .triangleUp: return "Triangle ▲"
-            case .triangleDown: return "Triangle ▼"
-            case .cross: return "Cross +"
-            case .xCross: return "Cross ×"
-            case .hexagon: return "Hexagon"
-            case .star: return "Star"
+            case .circle: return "● Circle"
+            case .square: return "■ Square"
+            case .diamond: return "◆ Diamond"
+            case .triangleUp: return "▲ Triangle Up"
+            case .triangleDown: return "▼ Triangle Down"
+            case .cross: return "✚ Cross"
+            case .xCross: return "✖ X Cross"
+            case .hexagon: return "⬡ Hexagon"
             }
         }
     }
