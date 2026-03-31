@@ -880,7 +880,7 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate, NSTextFie
     private func makeBadgeShapePopup(for state: TabItem.BadgeState) -> NSPopUpButton {
         let popup = NSPopUpButton(frame: .zero, pullsDown: false)
         popup.controlSize = .small
-        popup.font = .systemFont(ofSize: 11)
+        popup.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         popup.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             popup.widthAnchor.constraint(equalToConstant: 50),

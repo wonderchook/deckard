@@ -42,7 +42,7 @@ class TabItem {
             switch self {
             case .circle: return "●"
             case .square: return "■"
-            case .diamond: return "◆"
+            case .diamond: return "♦"
             case .triangleUp: return "▲"
             case .triangleDown: return "▼"
             case .cross: return "✚"
