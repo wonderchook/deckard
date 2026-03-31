@@ -40,14 +40,14 @@ class TabItem {
 
         var displayName: String {
             switch self {
-            case .circle: return "● Circle"
-            case .square: return "■ Square"
-            case .diamond: return "◆ Diamond"
-            case .triangleUp: return "▲ Triangle Up"
-            case .triangleDown: return "▼ Triangle Down"
-            case .cross: return "✚ Cross"
-            case .xCross: return "✖ X Cross"
-            case .hexagon: return "⬡ Hexagon"
+            case .circle: return "●"
+            case .square: return "■"
+            case .diamond: return "◆"
+            case .triangleUp: return "▲"
+            case .triangleDown: return "▼"
+            case .cross: return "✚"
+            case .xCross: return "✖"
+            case .hexagon: return "⬢"
             }
         }
     }

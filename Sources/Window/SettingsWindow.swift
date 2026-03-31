@@ -713,7 +713,7 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate, NSTextFie
                               _ entries: [(state: TabItem.BadgeState, label: String)]) -> NSView {
             let borderColor = NSColor.separatorColor.cgColor
             let rowHeight: CGFloat = 28
-            let colWidths: [CGFloat] = [120, 100, 50, 50]  // state, shape, color, blink
+            let colWidths: [CGFloat] = [120, 60, 50, 50]  // state, shape, color, blink
             let tableWidth = colWidths.reduce(0, +)
             let totalRows = 1 + entries.count
 
@@ -883,7 +883,7 @@ class SettingsWindowController: NSWindowController, NSToolbarDelegate, NSTextFie
         popup.font = .systemFont(ofSize: 11)
         popup.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            popup.widthAnchor.constraint(equalToConstant: 90),
+            popup.widthAnchor.constraint(equalToConstant: 50),
         ])
         for shape in TabItem.BadgeShape.allCases {
             popup.addItem(withTitle: shape.displayName)
