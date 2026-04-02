@@ -84,6 +84,11 @@ class QuotaView: NSView {
     private let sevenDayReset = NSTextField(labelWithString: "")
     private var sevenDayFillWidth: NSLayoutConstraint?
 
+    // --- Cost + extra usage row ---
+    private let sessionCostLabel = NSTextField(labelWithString: "")
+    private let extraUsageBadge = NSTextField(labelWithString: "")
+    private var separatorTopConstraint: NSLayoutConstraint?
+
     private let separator = NSView()
     private let tokenRateLabel = NSTextField(labelWithString: "")
     private let sparklineView = SparklineView()
@@ -124,6 +129,24 @@ class QuotaView: NSView {
         configureLabel(sevenDayPercent, size: 10, color: colors.secondaryText, alignment: .right, bold: true)
         configureBar(sevenDayBar, fill: sevenDayFill, colors: colors)
         configureLabel(sevenDayReset, size: 9, color: colors.secondaryText.withAlphaComponent(0.6))
+
+        // --- Session cost label ---
+        configureLabel(sessionCostLabel, size: 9, color: colors.secondaryText.withAlphaComponent(0.6))
+        sessionCostLabel.isHidden = true
+
+        // --- Extra usage badge ---
+        extraUsageBadge.translatesAutoresizingMaskIntoConstraints = false
+        extraUsageBadge.isBezeled = false
+        extraUsageBadge.isEditable = false
+        extraUsageBadge.drawsBackground = false
+        extraUsageBadge.font = .systemFont(ofSize: 9, weight: .semibold)
+        extraUsageBadge.textColor = .systemPurple
+        extraUsageBadge.wantsLayer = true
+        extraUsageBadge.layer?.cornerRadius = 3
+        extraUsageBadge.layer?.backgroundColor = NSColor.systemPurple.withAlphaComponent(0.15).cgColor
+        extraUsageBadge.stringValue = " Extra usage "
+        extraUsageBadge.isHidden = true
+        addSubview(extraUsageBadge)
 
         // --- Separator ---
         separator.translatesAutoresizingMaskIntoConstraints = false
@@ -210,8 +233,15 @@ class QuotaView: NSView {
             sevenDayReset.topAnchor.constraint(equalTo: sevenDayBar.bottomAnchor, constant: 2),
             sevenDayReset.leadingAnchor.constraint(equalTo: leadingAnchor),
 
+            // Session cost
+            sessionCostLabel.topAnchor.constraint(equalTo: sevenDayReset.bottomAnchor, constant: 6),
+            sessionCostLabel.leadingAnchor.constraint(equalTo: leadingAnchor),
+
+            // Extra usage badge
+            extraUsageBadge.topAnchor.constraint(equalTo: sessionCostLabel.bottomAnchor, constant: 4),
+            extraUsageBadge.leadingAnchor.constraint(equalTo: leadingAnchor),
+
             // Separator
-            separator.topAnchor.constraint(equalTo: sevenDayReset.bottomAnchor, constant: 6),
             separator.leadingAnchor.constraint(equalTo: leadingAnchor),
             separator.trailingAnchor.constraint(equalTo: trailingAnchor),
             separator.heightAnchor.constraint(equalToConstant: 0.5),
@@ -226,6 +256,22 @@ class QuotaView: NSView {
             sparklineView.centerYAnchor.constraint(equalTo: tokenRateLabel.centerYAnchor),
             sparklineView.heightAnchor.constraint(equalToConstant: 20),
         ])
+
+        // Dynamic separator top — updated in updateSeparatorPosition()
+        separatorTopConstraint = separator.topAnchor.constraint(equalTo: sevenDayReset.bottomAnchor, constant: 6)
+        separatorTopConstraint?.isActive = true
+    }
+
+    private func updateSeparatorPosition() {
+        separatorTopConstraint?.isActive = false
+        if !extraUsageBadge.isHidden {
+            separatorTopConstraint = separator.topAnchor.constraint(equalTo: extraUsageBadge.bottomAnchor, constant: 6)
+        } else if !sessionCostLabel.isHidden {
+            separatorTopConstraint = separator.topAnchor.constraint(equalTo: sessionCostLabel.bottomAnchor, constant: 6)
+        } else {
+            separatorTopConstraint = separator.topAnchor.constraint(equalTo: sevenDayReset.bottomAnchor, constant: 6)
+        }
+        separatorTopConstraint?.isActive = true
     }
 
     private var hasContext = false
@@ -291,6 +337,17 @@ class QuotaView: NSView {
                 widthConstraint: &sevenDayFillWidth,
                 bar: sevenDayBar)
             sevenDayReset.stringValue = resetString(for: snap.sevenDayResetsAt)
+
+            // Session cost
+            if let cost = snap.sessionCostUsd, cost > 0 {
+                sessionCostLabel.stringValue = String(format: "Session: $%.2f", cost)
+                sessionCostLabel.isHidden = false
+            } else {
+                sessionCostLabel.isHidden = true
+            }
+
+            // Extra usage indicator
+            extraUsageBadge.isHidden = !snap.isLikelyExtraUsage
         } else {
             fiveHourLabel.isHidden = true
             fiveHourPercent.isHidden = true
@@ -300,7 +357,11 @@ class QuotaView: NSView {
             sevenDayPercent.isHidden = true
             sevenDayBar.isHidden = true
             sevenDayReset.isHidden = true
+            sessionCostLabel.isHidden = true
+            extraUsageBadge.isHidden = true
         }
+
+        updateSeparatorPosition()
 
         // Show token rate if we have current data, sparkline history, or forced visible (Claude tabs)
         let showRate = hasRate || !sparklineData.isEmpty || alwaysShowRate
@@ -324,7 +385,9 @@ class QuotaView: NSView {
         let hasQuota = !fiveHourLabel.isHidden
         let hasRate = !tokenRateLabel.isHidden
         let hasSparkline = !sparklineView.isHidden
-        isHidden = !hasContext && !hasQuota && !hasRate && !hasSparkline
+        let hasCost = !sessionCostLabel.isHidden
+        let hasExtraUsage = !extraUsageBadge.isHidden
+        isHidden = !hasContext && !hasQuota && !hasRate && !hasSparkline && !hasCost && !hasExtraUsage
     }
 
     func applyTheme(colors: ThemeColors) {
@@ -334,7 +397,7 @@ class QuotaView: NSView {
         for label in [contextLabel, fiveHourLabel, sevenDayLabel] {
             label.textColor = secondary
         }
-        for label in [contextModel, fiveHourReset, sevenDayReset, tokenRateLabel] {
+        for label in [contextModel, fiveHourReset, sevenDayReset, tokenRateLabel, sessionCostLabel] {
             label.textColor = dim
         }
 

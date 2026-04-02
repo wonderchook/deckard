@@ -12,7 +12,12 @@ class QuotaMonitor {
         var fiveHourResetsAt: Date?
         var sevenDayUsed: Double       // 0-100
         var sevenDayResetsAt: Date?
+        var sessionCostUsd: Double?    // nil = no data, 0+ = cost in USD
         var lastUpdated: Date
+
+        var isLikelyExtraUsage: Bool {
+            fiveHourUsed >= 100.0 || sevenDayUsed >= 100.0
+        }
     }
 
     struct TokenRate {
@@ -46,7 +51,8 @@ class QuotaMonitor {
     /// Called from HookHandler when a hook event arrives with rate limit data.
     /// Merges non-nil fields into the current snapshot.
     func update(fiveHourUsed: Double?, fiveHourResetsAt: Double?,
-                sevenDayUsed: Double?, sevenDayResetsAt: Double?) {
+                sevenDayUsed: Double?, sevenDayResetsAt: Double?,
+                sessionCostUsd: Double? = nil) {
         var snapshot = liveSnapshot ?? cachedSnapshot ?? QuotaSnapshot(
             fiveHourUsed: 0, fiveHourResetsAt: nil,
             sevenDayUsed: 0, sevenDayResetsAt: nil,
@@ -56,6 +62,7 @@ class QuotaMonitor {
         if let v = fiveHourResetsAt { snapshot.fiveHourResetsAt = Date(timeIntervalSince1970: v) }
         if let v = sevenDayUsed { snapshot.sevenDayUsed = v }
         if let v = sevenDayResetsAt { snapshot.sevenDayResetsAt = Date(timeIntervalSince1970: v) }
+        if let v = sessionCostUsd { snapshot.sessionCostUsd = v }
         snapshot.lastUpdated = Date()
 
         liveSnapshot = snapshot
@@ -73,6 +80,7 @@ class QuotaMonitor {
         ]
         if let d = snap.fiveHourResetsAt { dict["fiveHourResetsAt"] = d.timeIntervalSince1970 }
         if let d = snap.sevenDayResetsAt { dict["sevenDayResetsAt"] = d.timeIntervalSince1970 }
+        // sessionCostUsd is intentionally not persisted — it's per-session data
         UserDefaults.standard.set(dict, forKey: Self.cacheKey)
     }
 
@@ -83,7 +91,6 @@ class QuotaMonitor {
         let lastUpdated = (dict["lastUpdated"] as? Double).map { Date(timeIntervalSince1970: $0) } ?? Date()
         let fiveResets = (dict["fiveHourResetsAt"] as? Double).map { Date(timeIntervalSince1970: $0) }
         let sevenResets = (dict["sevenDayResetsAt"] as? Double).map { Date(timeIntervalSince1970: $0) }
-
         // Only use cached data if it's less than 6 hours old
         guard Date().timeIntervalSince(lastUpdated) < 6 * 3600 else { return }
 

@@ -58,12 +58,14 @@ enum DeckardHooksInstaller {
         try:
             d=json.loads(sys.stdin.read());rl=d.get("rate_limits",{})
             fh=rl.get("five_hour",{});sd=rl.get("seven_day",{})
-            if not fh and not sd: sys.exit(0)
+            c=d.get("cost",{})
+            if not fh and not sd and "total_cost_usd" not in c: sys.exit(0)
             q=chr(34);p=[]
             if "used_percentage" in fh:p.append(q+"fiveHourUsed"+q+":"+str(fh["used_percentage"]))
             if "resets_at" in fh:p.append(q+"fiveHourResetsAt"+q+":"+str(fh["resets_at"]))
             if "used_percentage" in sd:p.append(q+"sevenDayUsed"+q+":"+str(sd["used_percentage"]))
             if "resets_at" in sd:p.append(q+"sevenDayResetsAt"+q+":"+str(sd["resets_at"]))
+            if "total_cost_usd" in c:p.append(q+"sessionCostUsd"+q+":"+str(c["total_cost_usd"]))
             if not p: sys.exit(0)
             msg="{"+q+"command"+q+":"+q+"quota-update"+q+","+",".join(p)+"}"
             sock=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)

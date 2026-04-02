@@ -122,13 +122,14 @@ class HookHandler {
 
     private func forwardRateLimits(from message: ControlMessage) {
         DiagnosticLog.shared.log("quota",
-            "hook=\(message.command) 5h=\(message.fiveHourUsed.map { String($0) } ?? "nil") 7d=\(message.sevenDayUsed.map { String($0) } ?? "nil")")
-        if message.fiveHourUsed != nil || message.sevenDayUsed != nil {
+            "hook=\(message.command) 5h=\(message.fiveHourUsed.map { String($0) } ?? "nil") 7d=\(message.sevenDayUsed.map { String($0) } ?? "nil") cost=\(message.sessionCostUsd.map { String($0) } ?? "nil")")
+        if message.fiveHourUsed != nil || message.sevenDayUsed != nil || message.sessionCostUsd != nil {
             QuotaMonitor.shared.update(
                 fiveHourUsed: message.fiveHourUsed,
                 fiveHourResetsAt: message.fiveHourResetsAt,
                 sevenDayUsed: message.sevenDayUsed,
-                sevenDayResetsAt: message.sevenDayResetsAt)
+                sevenDayResetsAt: message.sevenDayResetsAt,
+                sessionCostUsd: message.sessionCostUsd)
         }
     }
 

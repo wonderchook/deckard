@@ -92,6 +92,71 @@ final class QuotaMonitorTests: XCTestCase {
         XCTAssertTrue(QuotaMonitor.shared.sparklineData.isEmpty)
     }
 
+    // MARK: - Session cost
+
+    func testUpdateStoresSessionCost() {
+        QuotaMonitor.shared.update(
+            fiveHourUsed: 50.0,
+            fiveHourResetsAt: nil,
+            sevenDayUsed: 20.0,
+            sevenDayResetsAt: nil,
+            sessionCostUsd: 1.23)
+
+        let snap = QuotaMonitor.shared.latest
+        XCTAssertEqual(snap?.sessionCostUsd, 1.23)
+    }
+
+    func testPartialUpdatePreservesCost() {
+        QuotaMonitor.shared.update(
+            fiveHourUsed: 50.0,
+            fiveHourResetsAt: nil,
+            sevenDayUsed: 20.0,
+            sevenDayResetsAt: nil,
+            sessionCostUsd: 2.50)
+
+        // Rate-limit-only update — cost should be preserved
+        QuotaMonitor.shared.update(
+            fiveHourUsed: 60.0,
+            fiveHourResetsAt: nil,
+            sevenDayUsed: nil,
+            sevenDayResetsAt: nil)
+
+        let snap = QuotaMonitor.shared.latest
+        XCTAssertEqual(snap?.sessionCostUsd, 2.50)
+    }
+
+    // MARK: - Extra usage detection
+
+    func testIsLikelyExtraUsageWhenFiveHourAtHundred() {
+        QuotaMonitor.shared.update(
+            fiveHourUsed: 100.0,
+            fiveHourResetsAt: nil,
+            sevenDayUsed: 50.0,
+            sevenDayResetsAt: nil)
+
+        XCTAssertTrue(QuotaMonitor.shared.latest!.isLikelyExtraUsage)
+    }
+
+    func testIsLikelyExtraUsageWhenSevenDayAtHundred() {
+        QuotaMonitor.shared.update(
+            fiveHourUsed: 50.0,
+            fiveHourResetsAt: nil,
+            sevenDayUsed: 100.0,
+            sevenDayResetsAt: nil)
+
+        XCTAssertTrue(QuotaMonitor.shared.latest!.isLikelyExtraUsage)
+    }
+
+    func testNotExtraUsageWhenBelowHundred() {
+        QuotaMonitor.shared.update(
+            fiveHourUsed: 99.0,
+            fiveHourResetsAt: nil,
+            sevenDayUsed: 80.0,
+            sevenDayResetsAt: nil)
+
+        XCTAssertFalse(QuotaMonitor.shared.latest!.isLikelyExtraUsage)
+    }
+
     // MARK: - Compute token rate with no files
 
     func testComputeTokenRateWithNonexistentPathReturnsNil() {

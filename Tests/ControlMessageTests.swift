@@ -154,5 +154,17 @@ final class ControlMessageTests: XCTestCase {
         XCTAssertNil(msg.name)
         XCTAssertNil(msg.key)
         XCTAssertNil(msg.value)
+        XCTAssertNil(msg.sessionCostUsd)
+    }
+
+    func testDecodeQuotaUpdateWithCost() throws {
+        let json = """
+        {"command": "quota-update", "fiveHourUsed": 100.0, "sevenDayUsed": 45.0, "sessionCostUsd": 3.14}
+        """
+        let msg = try JSONDecoder().decode(ControlMessage.self, from: json.data(using: .utf8)!)
+        XCTAssertEqual(msg.command, "quota-update")
+        XCTAssertEqual(msg.fiveHourUsed, 100.0)
+        XCTAssertEqual(msg.sevenDayUsed, 45.0)
+        XCTAssertEqual(msg.sessionCostUsd, 3.14)
     }
 }

@@ -250,6 +250,8 @@ struct ControlMessage: Codable {
     var fiveHourResetsAt: Double?
     var sevenDayUsed: Double?
     var sevenDayResetsAt: Double?
+    // Session cost from Claude Code /status JSON
+    var sessionCostUsd: Double?
 }
 
 struct ControlResponse: Codable {
